@@ -1,0 +1,1103 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>천원의 아침밥 관리자 v5</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700;800&display=swap');
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --primary:#1d4ed8;--primary-dark:#1e3a8a;--primary-light:#eff6ff;
+  --orange:#f97316;--green:#22c55e;--amber:#f59e0b;--red:#ef4444;
+  --gray50:#f9fafb;--gray100:#f3f4f6;--gray200:#e5e7eb;--gray300:#d1d5db;
+  --gray500:#6b7280;--gray700:#374151;--gray900:#111827;
+}
+body{font-family:'Noto Sans KR',sans-serif;background:var(--gray100);min-height:100vh}
+.admin-header{background:linear-gradient(135deg,#1e3a8a,#1d4ed8);color:#fff;padding:13px 18px;display:flex;align-items:center;justify-content:space-between;box-shadow:0 2px 8px rgba(0,0,0,.2)}
+.admin-header h1{font-size:16px;font-weight:800}
+.admin-header .sub{font-size:10px;opacity:.75;margin-top:1px}
+.admin-header .right{display:flex;gap:5px;align-items:center;flex-wrap:wrap}
+.hbtn{padding:5px 11px;border-radius:7px;cursor:pointer;font-size:11px;font-weight:600;font-family:inherit;border:none;white-space:nowrap}
+.hbtn-ghost{background:rgba(255,255,255,.2);border:1px solid rgba(255,255,255,.4);color:#fff}
+.hbtn-green{background:var(--green);color:#fff}
+.tab-bar{background:#fff;display:flex;border-bottom:2px solid var(--gray200);padding:0 10px;overflow-x:auto}
+.tab-item{padding:10px 12px;cursor:pointer;font-size:11px;font-weight:600;color:var(--gray500);white-space:nowrap;border-bottom:3px solid transparent;margin-bottom:-2px;transition:all .2s}
+.tab-item.active{color:var(--primary);border-bottom-color:var(--primary)}
+.tab-content{display:none;padding:14px;max-width:1100px;margin:0 auto}
+.tab-content.active{display:block}
+/* 로딩 인디케이터 */
+.loading-bar{height:3px;background:linear-gradient(90deg,var(--primary),var(--green));position:fixed;top:0;left:0;width:0;z-index:999;transition:width .3s}
+.loading-bar.show{width:70%}.loading-bar.done{width:100%;opacity:0;transition:width .3s,opacity .3s .2s}
+/* 실시간 */
+.live-panel{background:linear-gradient(135deg,#0f172a,#1e3a8a);border-radius:12px;padding:16px 18px;margin-bottom:14px;color:#fff}
+.live-panel-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.live-panel-title{display:flex;align-items:center;gap:7px;font-size:13px;font-weight:700}
+.live-dot{width:8px;height:8px;border-radius:50%;background:#22c55e;animation:pulse 1.5s ease-in-out infinite;flex-shrink:0}
+@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(1.4)}}
+.live-stats-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:9px}
+.live-stat-card{background:rgba(255,255,255,.1);border-radius:9px;padding:13px;text-align:center;border:1px solid rgba(255,255,255,.15)}
+.live-stat-card .lsv{font-size:36px;font-weight:800;line-height:1;margin-bottom:4px}
+.live-stat-card .lsl{font-size:11px;font-weight:600;opacity:.8}
+.lsv-total{color:#93c5fd}.lsv-sold{color:#fdba74}.lsv-remain{color:#86efac}
+.lsv-remain.low{color:#fca5a5}
+.live-bar-wrap{margin-top:10px}
+.live-bar-label{display:flex;justify-content:space-between;font-size:10px;opacity:.8;margin-bottom:4px}
+.progress-bar{background:rgba(255,255,255,.2);border-radius:20px;height:7px;overflow:hidden}
+.progress-fill{height:100%;border-radius:20px;transition:width .4s}
+.live-note{margin-top:9px;font-size:10px;opacity:.6;text-align:center}
+.sold-out-banner{background:linear-gradient(135deg,#7f1d1d,#ef4444);border-radius:12px;padding:14px;text-align:center;margin-bottom:14px;color:#fff}
+.sold-out-banner h2{font-size:16px;font-weight:800;margin-bottom:4px}
+.sold-out-banner p{font-size:12px;opacity:.9}
+/* 날짜 탭 */
+.live-date-bar{display:flex;gap:7px;align-items:center;margin-bottom:12px;flex-wrap:wrap}
+.live-date-label{font-size:11px;font-weight:700;color:var(--gray700)}
+.live-date-tabs{display:flex;gap:4px;flex-wrap:wrap}
+.live-date-tab{padding:4px 9px;border:1.5px solid var(--gray200);border-radius:20px;background:#fff;cursor:pointer;font-size:11px;font-weight:600;color:var(--gray500);font-family:inherit;transition:all .2s}
+.live-date-tab.active{border-color:var(--primary);background:var(--primary);color:#fff}
+/* KPI */
+.kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:9px;margin-bottom:14px}
+.kpi-card{background:#fff;border-radius:9px;padding:13px;box-shadow:0 1px 5px rgba(0,0,0,.07);text-align:center}
+.kpi-card .kpi-icon{font-size:20px;margin-bottom:4px}
+.kpi-card .kpi-val{font-size:24px;font-weight:800;color:var(--primary)}
+.kpi-card .kpi-label{font-size:10px;color:var(--gray500);margin-top:2px}
+.kpi-card.accent{border:2px solid var(--primary);background:var(--primary-light)}
+.kpi-card.accent .kpi-val{color:var(--primary-dark)}
+/* 차트 */
+.chart-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px}
+@media(max-width:700px){.chart-grid{grid-template-columns:1fr}}
+.chart-panel{background:#fff;border-radius:9px;padding:13px;box-shadow:0 1px 5px rgba(0,0,0,.07)}
+.chart-panel h3{font-size:12px;font-weight:700;color:var(--gray900);margin-bottom:9px}
+.chart-wrap{position:relative;height:190px}
+/* 테이블 */
+.table-panel{background:#fff;border-radius:9px;box-shadow:0 1px 5px rgba(0,0,0,.07);overflow:hidden;margin-bottom:14px}
+.table-panel-header{padding:10px 13px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--gray200)}
+.table-panel-header h3{font-size:12px;font-weight:700;color:var(--gray900)}
+.search-input{padding:5px 9px;border:1.5px solid var(--gray200);border-radius:6px;font-size:11px;font-family:inherit;outline:none;width:170px}
+.search-input:focus{border-color:var(--primary)}
+table{width:100%;border-collapse:collapse}
+th{background:var(--gray50);padding:8px 9px;font-size:11px;font-weight:700;color:var(--gray700);text-align:left;border-bottom:1px solid var(--gray200)}
+td{padding:7px 9px;font-size:11px;color:var(--gray700);border-bottom:1px solid var(--gray100)}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:var(--primary-light)}
+.date-filter{display:flex;gap:7px;align-items:center;margin-bottom:12px;flex-wrap:wrap}
+.date-filter label{font-size:11px;font-weight:600;color:var(--gray700)}
+.date-filter input[type=date]{padding:4px 8px;border:1.5px solid var(--gray200);border-radius:6px;font-size:11px;font-family:inherit}
+.filter-btn{padding:4px 12px;background:var(--primary);color:#fff;border:none;border-radius:6px;font-size:11px;font-weight:600;font-family:inherit;cursor:pointer}
+.badge{display:inline-block;padding:2px 6px;border-radius:20px;font-size:10px;font-weight:700}
+.badge-green{background:#dcfce7;color:#166534}
+.badge-blue{background:#dbeafe;color:#1e40af}
+.badge-amber{background:#fef3c7;color:#92400e}
+.badge-red{background:#fee2e2;color:#991b1b}
+.progress-bar-sm{background:var(--gray200);border-radius:20px;height:5px;overflow:hidden;margin-top:3px}
+.progress-fill-sm{height:100%;border-radius:20px}
+/* 요일별 */
+.dow-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:9px;margin-bottom:14px}
+@media(max-width:600px){.dow-grid{grid-template-columns:repeat(2,1fr)}}
+.dow-card{background:#fff;border-radius:9px;padding:10px;box-shadow:0 1px 5px rgba(0,0,0,.07);text-align:center;border-top:3px solid var(--primary)}
+.dow-card .dow-name{font-size:12px;font-weight:700;color:var(--gray700);margin-bottom:3px}
+.dow-card .dow-val{font-size:24px;font-weight:800;color:var(--primary)}
+.dow-card .dow-avg{font-size:10px;color:var(--gray500);margin-top:2px}
+/* 서명부 */
+.sign-controls{display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap}
+.sign-controls label{font-size:11px;font-weight:600;color:var(--gray700)}
+.sign-controls select{padding:4px 9px;border:1.5px solid var(--gray200);border-radius:6px;font-size:11px;font-family:inherit;background:#fff}
+.sign-btn{padding:6px 14px;border:none;border-radius:6px;font-size:11px;font-weight:700;font-family:inherit;cursor:pointer;display:flex;align-items:center;gap:4px}
+.sign-btn-green{background:var(--green);color:#fff}
+.sign-btn-print{background:#6b7280;color:#fff}
+.signature-outer{background:#fff;border-radius:9px;box-shadow:0 1px 5px rgba(0,0,0,.07);overflow:hidden}
+.sign-title-bar{padding:12px 16px;border-bottom:2px solid var(--primary);display:flex;align-items:center;justify-content:space-between}
+.sign-title-bar h2{font-size:14px;font-weight:800;color:var(--primary)}
+.sign-subtitle{font-size:11px;color:var(--gray500)}
+.sign-wrap{overflow-x:auto}
+.st{width:100%;border-collapse:collapse;font-size:11.5px}
+.st th{background:#1d4ed8;color:#fff;padding:7px 6px;font-size:10.5px;font-weight:700;text-align:center;border:1px solid #1e40af}
+.st td{padding:6px 7px;border:1px solid #d1d5db;vertical-align:middle}
+.st .td-no{text-align:center;font-weight:700;color:var(--gray500);width:36px}
+.st .td-date{font-size:10px;color:#4b5563;text-align:center;width:100px;line-height:1.4}
+.st .td-sid{width:90px;text-align:center;font-size:11px;font-weight:600}
+.st .td-dept{width:110px;font-size:11px;color:var(--gray700);padding-left:6px}
+.st .td-name{width:72px;font-weight:700;font-size:12px;padding-left:8px}
+.st .td-pay{width:44px;text-align:center;font-size:11px;font-weight:700}
+.st .td-menu{font-size:11px;color:var(--gray700)}
+.st .td-water{width:42px;text-align:center;font-size:11px}
+.st tr.reg{background:#f0fdf4}
+.st tr.emp{background:#fff}
+/* 설정 */
+.settings-section{background:#fff;border-radius:9px;padding:14px;box-shadow:0 1px 5px rgba(0,0,0,.07);margin-bottom:12px}
+.settings-section h3{font-size:12px;font-weight:700;color:var(--gray900);margin-bottom:10px;padding-bottom:7px;border-bottom:1px solid var(--gray200)}
+.setting-row{display:flex;align-items:center;gap:10px;margin-bottom:9px;flex-wrap:wrap}
+.setting-label{font-size:11px;font-weight:600;color:var(--gray700);min-width:90px}
+.setting-input{padding:6px 9px;border:1.5px solid var(--gray200);border-radius:6px;font-size:12px;font-family:inherit;outline:none;flex:1;min-width:160px}
+.setting-input:focus{border-color:var(--primary)}
+.save-btn{padding:6px 16px;background:var(--primary);color:#fff;border:none;border-radius:6px;font-size:11px;font-weight:700;font-family:inherit;cursor:pointer}
+.menu-editor{width:100%;border-collapse:collapse;margin-top:7px;font-size:11px}
+.menu-editor th{background:var(--gray50);padding:7px 8px;font-weight:700;color:var(--gray700);border:1px solid var(--gray200)}
+.menu-editor td{padding:5px 7px;border:1px solid var(--gray200)}
+.menu-editor input{width:100%;padding:4px 7px;border:1px solid var(--gray300);border-radius:4px;font-size:11px;font-family:inherit}
+.add-row-btn{margin-top:7px;padding:5px 12px;background:var(--green);color:#fff;border:none;border-radius:6px;font-size:11px;font-weight:600;font-family:inherit;cursor:pointer}
+.del-row-btn{padding:2px 7px;background:var(--red);color:#fff;border:none;border-radius:4px;font-size:10px;cursor:pointer}
+.upload-zone{border:2px dashed var(--gray300);border-radius:8px;padding:16px;text-align:center;cursor:pointer;transition:all .2s}
+.upload-zone:hover{border-color:var(--primary);background:var(--primary-light)}
+.upload-zone p{font-size:11px;color:var(--gray500);margin-top:5px}
+.toggle-row{display:flex;align-items:center;gap:10px;margin-bottom:9px}
+.toggle-switch{position:relative;width:44px;height:24px;display:inline-block;cursor:pointer;flex-shrink:0}
+.toggle-switch input{opacity:0;width:0;height:0}
+.toggle-slider{position:absolute;inset:0;background:var(--gray300);border-radius:24px;transition:.3s}
+.toggle-slider:before{content:'';position:absolute;width:18px;height:18px;left:3px;bottom:3px;background:#fff;border-radius:50%;transition:.3s}
+input:checked+.toggle-slider{background:var(--primary)}
+input:checked+.toggle-slider:before{transform:translateX(20px)}
+.toggle-label{font-size:11px;font-weight:600;color:var(--gray700)}
+/* 점검표 */
+.check-panel{background:#fff;border-radius:9px;padding:14px;box-shadow:0 1px 5px rgba(0,0,0,.07);margin-bottom:12px}
+.check-panel h3{font-size:12px;font-weight:700;color:var(--gray900);margin-bottom:10px;padding-bottom:7px;border-bottom:1px solid var(--gray200)}
+.check-table{width:100%;border-collapse:collapse;font-size:11.5px}
+.check-table th{background:#1d4ed8;color:#fff;padding:8px 10px;font-size:11px;font-weight:700;text-align:center;border:1px solid #1e40af}
+.check-table td{padding:8px 10px;border:1px solid var(--gray200);text-align:center;vertical-align:middle}
+.check-table td.label{text-align:left;font-weight:600;background:var(--gray50)}
+.check-table td.val{font-weight:700;color:var(--primary-dark)}
+.check-table td.val-input{padding:4px 6px}
+.check-table td.val-input input{width:70px;padding:4px 6px;border:1.5px solid var(--primary);border-radius:5px;font-size:12px;font-weight:700;text-align:center;font-family:inherit;color:var(--primary-dark)}
+.check-table td.pct{font-weight:800;color:var(--green)}
+.check-table td.pct.low{color:var(--red)}
+.check-summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:9px;margin-bottom:14px}
+.check-kpi{background:var(--primary-light);border:1.5px solid var(--primary);border-radius:8px;padding:10px;text-align:center}
+.check-kpi .ck-val{font-size:22px;font-weight:800;color:var(--primary-dark)}
+.check-kpi .ck-label{font-size:10px;color:var(--gray700);margin-top:2px}
+/* 상태 뱃지 */
+.status-badge{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:20px;font-size:10px;font-weight:700}
+.status-ok{background:#dcfce7;color:#166534}
+.status-err{background:#fee2e2;color:#991b1b}
+.status-load{background:#fef3c7;color:#92400e}
+/* 인쇄 */
+@media print{
+  .admin-header,.tab-bar,.sign-controls,.hbtn,.loading-bar{display:none!important}
+  .tab-content{display:block!important;padding:0}
+  .signature-outer{box-shadow:none;border-radius:0}
+  body{background:#fff}
+  .st th{background:#1d4ed8!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .st tr.reg{background:#f0fdf4!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+}
+</style>
+</head>
+<body>
+
+<div class="loading-bar" id="loadingBar"></div>
+
+<div class="admin-header">
+  <div class="left">
+    <h1>🍱 천원의 아침밥 관리자 v5</h1>
+    <div class="sub">유한대학교 입학·학생처 | 학생복지팀 &nbsp;|&nbsp; <span id="gasStatus" class="status-badge status-load">⏳ 연결 중</span></div>
+  </div>
+  <div class="right">
+    <button class="hbtn hbtn-ghost" onclick="loadAll()">🔄 새로고침</button>
+    <button class="hbtn hbtn-green" onclick="exportCSV()">📥 CSV</button>
+  </div>
+</div>
+
+<div class="tab-bar">
+  <div class="tab-item active" onclick="switchTab('live')">📡 실시간</div>
+  <div class="tab-item" onclick="switchTab('overview')">📊 통계</div>
+  <div class="tab-item" onclick="switchTab('dow')">📅 요일별</div>
+  <div class="tab-item" onclick="switchTab('dept')">🏫 학과별</div>
+  <div class="tab-item" onclick="switchTab('grade')">📚 학년별</div>
+  <div class="tab-item" onclick="switchTab('time')">⏰ 시간대</div>
+  <div class="tab-item" onclick="switchTab('sign')">📝 서명부</div>
+  <div class="tab-item" onclick="switchTab('checklist')">📋 점검표</div>
+  <div class="tab-item" onclick="switchTab('list')">🗒️ 목록</div>
+  <div class="tab-item" onclick="switchTab('settings')">⚙️ 설정</div>
+</div>
+
+<!-- ① 실시간 -->
+<div class="tab-content active" id="tab-live">
+  <div class="live-date-bar">
+    <span class="live-date-label">📅 날짜:</span>
+    <div class="live-date-tabs" id="liveDateTabs"></div>
+  </div>
+  <div id="soldOutBannerWrap"></div>
+  <div class="live-panel">
+    <div class="live-panel-header">
+      <div class="live-panel-title"><div class="live-dot"></div>실시간 이용 현황</div>
+      <span style="font-size:10px;opacity:.65" id="liveUpdatedAt">—</span>
+    </div>
+    <div class="live-stats-grid">
+      <div class="live-stat-card"><div class="lsv lsv-total" id="liveTotal">—</div><div class="lsl">판매 갯수</div></div>
+      <div class="live-stat-card"><div class="lsv lsv-sold" id="liveSold">—</div><div class="lsl">판매</div></div>
+      <div class="live-stat-card"><div class="lsv lsv-remain" id="liveRemain">—</div><div class="lsl">잔여</div></div>
+    </div>
+    <div class="live-bar-wrap">
+      <div class="live-bar-label"><span>판매율</span><span id="livePct">—%</span></div>
+      <div class="progress-bar"><div class="progress-fill" id="liveBar" style="width:0%;background:var(--green)"></div></div>
+    </div>
+    <div class="live-note">※ 정확한 수량은 판매현장 사정에 따라 다소 차이가 있을 수 있으니 참고바랍니다.</div>
+  </div>
+  <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center">
+    <button onclick="toggleSoldOut()" id="soldOutToggleBtn" style="padding:8px 16px;border:none;border-radius:8px;font-size:12px;font-weight:700;font-family:inherit;cursor:pointer;background:var(--red);color:#fff">⛔ 수동 판매 종료</button>
+    <button onclick="toggleSoldOut()" id="soldOutResumeBtn" style="display:none;padding:8px 16px;border:none;border-radius:8px;font-size:12px;font-weight:700;font-family:inherit;cursor:pointer;background:var(--green);color:#fff">▶ 판매 재개</button>
+    <span style="font-size:11px;color:var(--gray500)">잔여 0 또는 수동 종료 시 학생화면에 종료 문구가 표시됩니다</span>
+  </div>
+  <div class="table-panel">
+    <div class="table-panel-header"><h3>📅 전체 운영일 현황</h3></div>
+    <div style="overflow-x:auto"><table>
+      <thead><tr><th>이용일</th><th>메뉴</th><th>판매갯수</th><th>판매</th><th>잔여</th><th>판매율</th></tr></thead>
+      <tbody id="liveAllDates"></tbody>
+    </table></div>
+  </div>
+</div>
+
+<!-- ② 통계 -->
+<div class="tab-content" id="tab-overview">
+  <div class="kpi-grid" id="kpiGrid"></div>
+  <div class="chart-grid">
+    <div class="chart-panel"><h3>📅 일별 신청 현황</h3><div class="chart-wrap"><canvas id="chartDaily"></canvas></div></div>
+    <div class="chart-panel"><h3>💳 송금 방법 비율</h3><div class="chart-wrap"><canvas id="chartPay"></canvas></div></div>
+  </div>
+</div>
+
+<!-- ③ 요일별 -->
+<div class="tab-content" id="tab-dow">
+  <div class="dow-grid" id="dowCards"></div>
+  <div class="chart-grid">
+    <div class="chart-panel" style="grid-column:1/-1"><h3>📅 요일별 신청 인원</h3><div class="chart-wrap" style="height:230px"><canvas id="chartDow"></canvas></div></div>
+  </div>
+  <div class="table-panel">
+    <div class="table-panel-header"><h3>요일별 상세</h3></div>
+    <table><thead><tr><th>요일</th><th>총 신청</th><th>운영일수</th><th>일 평균</th><th>최다 신청일</th></tr></thead><tbody id="dowTableBody"></tbody></table>
+  </div>
+</div>
+
+<!-- ④ 학과별 -->
+<div class="tab-content" id="tab-dept">
+  <div class="chart-grid">
+    <div class="chart-panel" style="grid-column:1/-1"><h3>🏫 학과별 신청 인원</h3><div style="position:relative;height:280px"><canvas id="chartDept"></canvas></div></div>
+  </div>
+  <div class="table-panel">
+    <div class="table-panel-header"><h3>학과별 상세</h3></div>
+    <table><thead><tr><th>순위</th><th>학과</th><th>신청 인원</th><th>비율</th></tr></thead><tbody id="deptTableBody"></tbody></table>
+  </div>
+</div>
+
+<!-- ⑤ 학년별 -->
+<div class="tab-content" id="tab-grade">
+  <div class="chart-grid">
+    <div class="chart-panel"><h3>📚 학년별</h3><div class="chart-wrap"><canvas id="chartGrade"></canvas></div></div>
+    <div class="chart-panel"><h3>📈 학년별 추이</h3><div class="chart-wrap"><canvas id="chartGradeDaily"></canvas></div></div>
+  </div>
+  <div class="table-panel">
+    <div class="table-panel-header"><h3>학년별 상세</h3></div>
+    <table><thead><tr><th>학년</th><th>신청 인원</th><th>비율</th><th>최다 학과</th></tr></thead><tbody id="gradeTableBody"></tbody></table>
+  </div>
+</div>
+
+<!-- ⑥ 시간대별 -->
+<div class="tab-content" id="tab-time">
+  <div class="date-filter">
+    <label>날짜</label><input type="date" id="timeFilterDate">
+    <button class="filter-btn" onclick="renderTimeTab()">조회</button>
+  </div>
+  <div class="chart-panel" style="margin-bottom:12px"><h3>⏰ 5분 단위 신청 분포</h3><div style="position:relative;height:240px"><canvas id="chartTime"></canvas></div></div>
+  <div class="table-panel">
+    <div class="table-panel-header"><h3>시간대별 상세</h3></div>
+    <table><thead><tr><th>시간대</th><th>신청 인원</th><th>누적</th></tr></thead><tbody id="timeTableBody"></tbody></table>
+  </div>
+</div>
+
+<!-- ⑦ 서명부 -->
+<div class="tab-content" id="tab-sign">
+  <div class="sign-controls">
+    <label>날짜 선택</label>
+    <select id="signDateSelect" onchange="renderSignSheet()"><option value="">날짜를 선택하세요</option></select>
+    <button class="sign-btn sign-btn-green" onclick="downloadSignExcel()">📥 엑셀 다운로드</button>
+    <button class="sign-btn sign-btn-print" onclick="printSignSheet()">🖨️ 인쇄</button>
+  </div>
+  <div id="signSheetWrap"><div style="text-align:center;padding:28px;color:var(--gray500)">날짜를 선택하면 서명부가 생성됩니다</div></div>
+</div>
+
+<!-- ⑧ 점검표 -->
+<div class="tab-content" id="tab-checklist">
+  <div class="check-panel">
+    <h3>📋 2026년 천원의 아침밥 식수인원 실적 점검표</h3>
+    <div class="check-summary" id="checkSummary"></div>
+    <div style="margin-bottom:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <span style="font-size:11px;font-weight:600;color:var(--gray700)">확정인원(식수):</span>
+      <input id="checkTarget" type="number" value="6000" style="padding:5px 9px;border:1.5px solid var(--gray200);border-radius:6px;font-size:12px;width:100px;font-family:inherit" onchange="renderChecklist()">
+      <span style="font-size:11px;color:var(--gray500)">명</span>
+      <button onclick="downloadChecklistExcel()" style="padding:6px 14px;background:var(--green);color:#fff;border:none;border-radius:6px;font-size:11px;font-weight:700;font-family:inherit;cursor:pointer;margin-left:auto">📥 엑셀 다운로드</button>
+    </div>
+    <div style="overflow-x:auto">
+      <table class="check-table" id="checkTable">
+        <thead>
+          <tr>
+            <th>구분</th><th>확정인원(식수)</th>
+            <th>1~3월</th><th>4월</th><th>5월</th><th>6월</th>
+            <th>7월</th><th>8월</th><th>9월</th><th>10월</th><th>11월</th><th>12월</th>
+            <th>달성율<br>(상반기)</th><th>달성율<br>(전체)</th>
+          </tr>
+        </thead>
+        <tbody id="checkTableBody"></tbody>
+      </table>
+    </div>
+    <p style="font-size:10px;color:var(--gray500);margin-top:10px">※ 학교 집계/정산 일정상의 이유로 식수인원 확인이 5일까지 불가능한 경우 업로드 예정일을 작성하여 주시기 바랍니다.</p>
+  </div>
+</div>
+
+<!-- ⑨ 신청 목록 -->
+<div class="tab-content" id="tab-list">
+  <div class="date-filter">
+    <label>날짜</label><input type="date" id="listFilterDate">
+    <button class="filter-btn" onclick="renderListTab()">조회</button>
+    <input class="search-input" type="text" id="listSearch" placeholder="학번·성명 검색" oninput="renderListTab()">
+  </div>
+  <div class="table-panel">
+    <div class="table-panel-header"><h3>신청 목록</h3><span id="listCount" style="font-size:11px;color:var(--gray500)"></span></div>
+    <div style="overflow-x:auto"><table>
+      <thead><tr><th>#</th><th>신청일</th><th>이용일</th><th>학과</th><th>학년</th><th>학번</th><th>성명</th><th>신청시간</th><th>메뉴</th><th>결제</th></tr></thead>
+      <tbody id="listTableBody"></tbody>
+    </table></div>
+  </div>
+</div>
+
+<!-- ⑩ 설정 -->
+<div class="tab-content" id="tab-settings">
+  <div class="settings-section">
+    <h3>⏰ 신청 시간 설정</h3>
+    <div class="setting-row"><span class="setting-label">신청 시작 시간</span><input class="setting-input" type="time" id="setStartTime" value="08:30" style="max-width:140px"><span style="font-size:11px;color:var(--gray500)">이 시간 이전 접속 시 학생화면에 안내</span></div>
+    <div class="setting-row"><span class="setting-label">신청 종료 시간</span><input class="setting-input" type="time" id="setEndTime" value="10:30" style="max-width:140px"></div>
+    <button class="save-btn" onclick="saveTimeSettings()">💾 시간 저장</button>
+    <div id="timeSaveMsg" style="font-size:11px;color:var(--green);margin-top:7px;display:none">✅ 저장되었습니다.</div>
+  </div>
+  <div class="settings-section">
+    <h3>⛔ 판매 종료 설정</h3>
+    <div class="toggle-row">
+      <label class="toggle-switch"><input type="checkbox" id="toggleSoldOutCheck" onchange="applyManualSoldOut()"><span class="toggle-slider"></span></label>
+      <span class="toggle-label">수동 판매 종료 활성화</span>
+    </div>
+    <div class="setting-row"><span class="setting-label">종료 안내 문구</span><input class="setting-input" id="setSoldOutMsg" value="금일 천원의 아침밥 판매가 종료되었습니다. 감사합니다."></div>
+    <button class="save-btn" onclick="saveSoldOutSettings()">💾 저장</button>
+    <div id="soSaveMsg" style="font-size:11px;color:var(--green);margin-top:7px;display:none">✅ 저장되었습니다.</div>
+  </div>
+  <div class="settings-section">
+    <h3>💳 계좌 정보 설정</h3>
+    <div class="setting-row"><span class="setting-label">은행명</span><input class="setting-input" id="setBankName" value="카카오뱅크"></div>
+    <div class="setting-row"><span class="setting-label">계좌번호</span><input class="setting-input" id="setBankNo" value="3333-13-8457612"></div>
+    <div class="setting-row"><span class="setting-label">예금주</span><input class="setting-input" id="setBankOwner" value="최 광 균"></div>
+    <div class="setting-row"><span class="setting-label">이체 금액</span><input class="setting-input" id="setBankAmt" value="1,000원"></div>
+    <button class="save-btn" onclick="saveAccountSettings()">💾 저장</button>
+    <div id="acctSaveMsg" style="font-size:11px;color:var(--green);margin-top:7px;display:none">✅ 저장되었습니다.</div>
+  </div>
+  <div class="settings-section">
+    <h3>🍽️ 식단 관리 (스프레드시트 연동)</h3>
+    <div class="upload-zone" onclick="document.getElementById('menuFileInput').click()">
+      <div style="font-size:26px">📂</div>
+      <p>엑셀(.xlsx) 업로드 — A열=날짜(YYYY-MM-DD), B열=메뉴, C열=수량</p>
+      <input type="file" id="menuFileInput" accept=".xlsx,.xls" style="display:none" onchange="uploadMenuFile(this)">
+    </div>
+    <table class="menu-editor" id="menuEditorTable" style="margin-top:12px">
+      <thead><tr><th>날짜</th><th>메뉴</th><th>수량</th><th>삭제</th></tr></thead>
+      <tbody id="menuEditorBody"></tbody>
+    </table>
+    <button class="add-row-btn" onclick="addMenuRow()">+ 행 추가</button>
+    <button class="save-btn" onclick="saveMenuDataFull()" style="margin-left:7px">💾 식단 저장 (시트 반영)</button>
+    <div id="menuSaveMsg" style="font-size:11px;color:var(--green);margin-top:7px;display:none">✅ 저장 완료. 스프레드시트에 반영되었습니다.</div>
+    <div id="menuSaveErr" style="font-size:11px;color:var(--red);margin-top:7px;display:none"></div>
+  </div>
+</div>
+
+<script>
+// ══════════════════════════════════════════════════════
+//  ⚙️ GAS URL — 배포 후 교체
+// ══════════════════════════════════════════════════════
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbxNTGgNwgfpbS5NhCOCqrJ_-lFF7EaWm0iJLVcuXlnD4p2CNmf7ULD2mCdBn8-Pzfw2/exec';
+const YUHAN_COLORS = ['#1d4ed8','#f97316','#22c55e','#f59e0b','#5b8dee','#ef4444','#8b5cf6','#06b6d4','#ec4899','#84cc16'];
+const DAY_NAMES = ['일','월','화','수','목','금','토'];
+const DAY_COLORS = ['','#ef4444','#f97316','#22c55e','#1d4ed8','#8b5cf6'];
+const IS_DEMO = GAS_URL.includes('YOUR_DEPLOYMENT_ID');
+
+// ── localStorage 헬퍼 ──
+const LS = {
+  get:(k,d=null)=>{ try{const r=localStorage.getItem('yuhan_bf_'+k);return r?JSON.parse(r):d;}catch(e){return d;} },
+  set:(k,v)=>{ try{localStorage.setItem('yuhan_bf_'+k,JSON.stringify(v));}catch(e){} }
+};
+
+// ══════════════════════════════════════════════════════
+//  전역 상태 — 데이터는 여기서 단일 관리
+// ══════════════════════════════════════════════════════
+let allData   = [];   // GAS에서 받은 신청 데이터
+let MENU_DATA = {};   // GAS 식단 시트 (또는 localStorage fallback)
+let charts    = {};
+let selectedLiveDate = '';
+let liveRefreshTimer = null;
+
+// ── 기본 메뉴 데이터 (GAS 연결 전 fallback) ──
+function getDefaultMenuData() {
+  return {
+    '2026-04-01':{menus:['천원의 랍스타(특식)'],qty:300},
+    '2026-04-07':{menus:['햄치즈밥버거','(봉구스)'],qty:100},
+    '2026-04-08':{menus:['닭갈비 참치마요','(봉구스)'],qty:100},
+    '2026-04-09':{menus:['오므라이스(햄)','(봉구스)'],qty:100},
+    '2026-04-14':{menus:['빅치킨마요','(한솥)'],qty:100},
+    '2026-04-15':{menus:['돈까스도련님','(한솥)'],qty:100},
+    '2026-04-16':{menus:['돈까스카레','(한솥)'],qty:100},
+    '2026-04-21':{menus:['김치제육','(봉구스)'],qty:100},
+    '2026-04-22':{menus:['든든한끼구성','(봉구스)'],qty:100},
+    '2026-04-23':{menus:['든든한끼구성','(봉구스)'],qty:100},
+    '2026-04-27':{menus:['든든한끼구성','(한솥)'],qty:100},
+    '2026-04-28':{menus:['든든한끼구성','(한솥)'],qty:100},
+    '2026-04-29':{menus:['제육돈까스도련님','(한솥)'],qty:100},
+    '2026-04-30':{menus:['빅치킨마요','(한솥)'],qty:100},
+    '2026-05-06':{menus:['김치소불고기','(봉구스)'],qty:100},
+    '2026-05-07':{menus:['치즈제육','(봉구스)'],qty:100},
+    '2026-05-12':{menus:['돈까스카레','(한솥)'],qty:100},
+    '2026-05-13':{menus:['빅치킨마요','(한솥)'],qty:100},
+    '2026-05-14':{menus:['제육돈까스도련님','(한솥)'],qty:100},
+    '2026-05-19':{menus:['김치제육','(봉구스)'],qty:100},
+    '2026-05-20':{menus:['햄치즈','(봉구스)'],qty:100},
+    '2026-05-21':{menus:['닭갈비+참치마요','(봉구스)'],qty:100},
+    '2026-05-26':{menus:['빅치킨마요','(한솥)'],qty:100},
+    '2026-05-27':{menus:['돈까스도련님','(한솥)'],qty:100},
+    '2026-06-17':{menus:['든든한끼구성'],qty:100},
+    '2026-06-18':{menus:['든든한끼구성'],qty:100},
+    '2026-06-22':{menus:['든든한끼구성'],qty:100},
+    '2026-06-23':{menus:['든든한끼구성'],qty:100},
+  };
+}
+
+// ══════════════════════════════════════════════════════
+//  GAS JSONP
+// ══════════════════════════════════════════════════════
+function fetchFromGAS(params, callback) {
+  const cbName = 'cb_'+Date.now()+'_'+Math.random().toString(36).slice(2);
+  const script = document.createElement('script');
+  const timeout = setTimeout(()=>{
+    delete window[cbName];
+    if(document.body.contains(script)) document.body.removeChild(script);
+    callback(null, 'timeout');
+  }, 15000);
+  window[cbName] = function(data){
+    clearTimeout(timeout);
+    delete window[cbName];
+    if(document.body.contains(script)) document.body.removeChild(script);
+    callback(data, null);
+  };
+  const query = new URLSearchParams({...params, callback:cbName});
+  script.src = GAS_URL+'?'+query;
+  document.body.appendChild(script);
+}
+
+// ── 로딩 바 ──
+function loadingStart(){ const b=document.getElementById('loadingBar'); b.className='loading-bar show'; }
+function loadingDone(){  const b=document.getElementById('loadingBar'); b.className='loading-bar done'; setTimeout(()=>b.className='loading-bar',600); }
+
+// ── GAS 상태 뱃지 ──
+function setGasStatus(ok){
+  const el=document.getElementById('gasStatus');
+  if(IS_DEMO){ el.textContent='⚡ 데모 모드'; el.className='status-badge status-load'; return; }
+  el.textContent = ok ? '🟢 GAS 연결됨' : '🔴 GAS 오류';
+  el.className   = ok ? 'status-badge status-ok' : 'status-badge status-err';
+}
+
+// ══════════════════════════════════════════════════════
+//  초기 데이터 로드 — GAS에서 신청+식단 동시 로드
+// ══════════════════════════════════════════════════════
+function loadAll() {
+  loadingStart();
+  if (IS_DEMO) {
+    MENU_DATA = LS.get('menu', getDefaultMenuData());
+    allData   = generateSampleData();
+    setGasStatus(true);
+    renderAll();
+    loadingDone();
+    return;
+  }
+
+  // GAS에서 식단 먼저, 그 다음 신청 데이터 로드 (순차)
+  fetchFromGAS({action:'getMenu'}, function(menuRes, menuErr){
+    if (!menuErr && menuRes && menuRes.status==='ok' && menuRes.data && Object.keys(menuRes.data).length > 0) {
+      MENU_DATA = menuRes.data;
+      LS.set('menu', MENU_DATA); // 캐시 저장
+    } else {
+      // GAS 식단 없으면 localStorage → 기본값 순으로 fallback
+      MENU_DATA = LS.get('menu', getDefaultMenuData());
+    }
+
+    fetchFromGAS({action:'getAll'}, function(data, err){
+      if (!err && Array.isArray(data)) {
+        allData = data;
+        setGasStatus(true);
+      } else {
+        allData = [];
+        setGasStatus(false);
+      }
+      renderAll();
+      loadingDone();
+    });
+  });
+}
+
+// ══════════════════════════════════════════════════════
+//  탭 전환
+// ══════════════════════════════════════════════════════
+function switchTab(id){
+  const ids=['live','overview','dow','dept','grade','time','sign','checklist','list','settings'];
+  document.querySelectorAll('.tab-item').forEach((el,i)=>el.classList.toggle('active',ids[i]===id));
+  document.querySelectorAll('.tab-content').forEach(el=>el.classList.remove('active'));
+  document.getElementById('tab-'+id).classList.add('active');
+}
+
+// ── 날짜 유틸 ──
+function fDate(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+function getDow(s){return new Date(s).getDay();}
+function destroyChart(id){if(charts[id]){charts[id].destroy();delete charts[id];}}
+
+// ══════════════════════════════════════════════════════
+//  전체 렌더 — MENU_DATA와 allData가 모두 준비된 후 호출
+// ══════════════════════════════════════════════════════
+function renderAll(){
+  buildLiveDateTabs();
+  renderLive();
+  renderAllDatesTable();
+  renderKPI();
+  renderOverviewCharts();
+  renderDowTab();
+  renderDeptTab();
+  renderGradeTab();
+  const today=fDate(new Date());
+  document.getElementById('timeFilterDate').value=today;
+  document.getElementById('listFilterDate').value=today;
+  renderTimeTab();
+  renderListTab();
+  buildSignDateSelect();
+  renderChecklist();
+  renderMenuEditor();
+  initSettingsUI();
+}
+
+// ══════════════════════════════════════════════════════
+//  실시간 현황
+// ══════════════════════════════════════════════════════
+function isSoldOutState(date){
+  const so=LS.get('soldout_settings',{manual:false});
+  if(so.manual) return true;
+  const info=MENU_DATA[date]; if(!info) return false;
+  const sold=allData.filter(r=>r.date===date).length;
+  return sold >= info.qty;
+}
+
+function buildLiveDateTabs(){
+  const container=document.getElementById('liveDateTabs');
+  const today=fDate(new Date());
+  const operDates=Object.keys(MENU_DATA).sort();
+  if(operDates.length===0){container.innerHTML='<span style="font-size:11px;color:var(--gray500)">식단 데이터 없음</span>';return;}
+  selectedLiveDate = operDates.find(d=>d>=today) || operDates[operDates.length-1];
+  const show=operDates.filter(d=>{const diff=(new Date(d)-new Date(today))/86400000;return diff>=-3&&diff<=14;}).slice(0,10);
+  container.innerHTML=show.map(d=>{
+    const dt=new Date(d);
+    const label=(dt.getMonth()+1)+'/'+(dt.getDate())+'('+DAY_NAMES[dt.getDay()]+')';
+    return '<button class="live-date-tab'+(d===selectedLiveDate?' active':'')+'" onclick="selectLiveDate(\''+d+'\',this)">'+label+'</button>';
+  }).join('');
+}
+
+function selectLiveDate(date,btn){
+  document.querySelectorAll('.live-date-tab').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  selectedLiveDate=date;
+  renderLive();
+}
+
+function renderLive(){
+  const date=selectedLiveDate;
+  const info=MENU_DATA[date];
+  if(!info){
+    ['liveTotal','liveSold','liveRemain'].forEach(id=>document.getElementById(id).textContent='—');
+    document.getElementById('livePct').textContent='—%';
+    document.getElementById('liveBar').style.width='0%';
+    document.getElementById('soldOutBannerWrap').innerHTML='';
+    return;
+  }
+  const total=info.qty;
+  const sold=allData.filter(r=>r.date===date).length;
+  const remain=Math.max(0,total-sold);
+  const pct=total>0?Math.round(sold/total*100):0;
+  const isLow=remain<=20&&remain>0;
+  const isSO=isSoldOutState(date);
+  document.getElementById('liveTotal').textContent=total;
+  document.getElementById('liveSold').textContent=sold;
+  document.getElementById('liveRemain').textContent=remain;
+  document.getElementById('livePct').textContent=pct+'%';
+  document.getElementById('liveBar').style.width=pct+'%';
+  document.getElementById('liveBar').style.background=isSO?'var(--red)':isLow?'var(--orange)':'var(--green)';
+  document.getElementById('liveRemain').className='lsv lsv-remain'+(isLow||isSO?' low':'');
+  const now=new Date();
+  document.getElementById('liveUpdatedAt').textContent='최종 갱신: '+String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0')+':'+String(now.getSeconds()).padStart(2,'0');
+  // 종료 배너
+  const so=LS.get('soldout_settings',{manual:false,msg:'금일 천원의 아침밥 판매가 종료되었습니다. 감사합니다.'});
+  const banner=document.getElementById('soldOutBannerWrap');
+  if(isSO && date===fDate(new Date())){
+    banner.innerHTML='<div class="sold-out-banner"><h2>⛔ 판매 종료</h2><p>'+so.msg+'</p></div>';
+  } else { banner.innerHTML=''; }
+  // 수동 종료 버튼
+  const manualOn=so.manual;
+  document.getElementById('soldOutToggleBtn').style.display=manualOn?'none':'inline-flex';
+  document.getElementById('soldOutResumeBtn').style.display=manualOn?'inline-flex':'none';
+}
+
+function renderAllDatesTable(){
+  const tbody=document.getElementById('liveAllDates');
+  const operDates=Object.keys(MENU_DATA).sort();
+  if(operDates.length===0){tbody.innerHTML='<tr><td colspan="6" style="text-align:center;color:var(--gray500);padding:20px">식단 데이터가 없습니다. 설정에서 식단을 저장해주세요.</td></tr>';return;}
+  tbody.innerHTML=operDates.map(date=>{
+    const info=MENU_DATA[date];
+    const total=info.qty;
+    const sold=allData.filter(r=>r.date===date).length;
+    const remain=Math.max(0,total-sold);
+    const pct=total>0?Math.round(sold/total*100):0;
+    const isSO=isSoldOutState(date);
+    const isLow=remain<=20&&remain>0;
+    const dt=new Date(date);
+    const badge=isSO?'<span class="badge badge-red">종료</span>':isLow?'<span class="badge badge-amber">'+remain+'</span>':'<span class="badge badge-green">'+remain+'</span>';
+    return '<tr><td>'+date+' ('+DAY_NAMES[dt.getDay()]+')</td><td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+info.menus.join(' ')+'</td><td><b>'+total+'</b></td><td><b style="color:var(--orange)">'+sold+'</b></td><td>'+badge+'</td><td><div style="display:flex;align-items:center;gap:5px"><div class="progress-bar-sm" style="flex:1"><div class="progress-fill-sm" style="width:'+pct+'%;background:'+(isSO?'var(--red)':isLow?'var(--orange)':'var(--green)')+'"></div></div><span style="font-size:10px;font-weight:700">'+pct+'%</span></div></td></tr>';
+  }).join('');
+}
+
+function toggleSoldOut(){
+  const so=LS.get('soldout_settings',{manual:false,msg:'금일 천원의 아침밥 판매가 종료되었습니다. 감사합니다.'});
+  so.manual=!so.manual;
+  LS.set('soldout_settings',so);
+  document.getElementById('toggleSoldOutCheck').checked=so.manual;
+  renderLive(); renderAllDatesTable();
+}
+
+// ══════════════════════════════════════════════════════
+//  KPI & 통계 차트
+// ══════════════════════════════════════════════════════
+function renderKPI(){
+  const total=allData.length;
+  const today=fDate(new Date());
+  const todayCount=allData.filter(r=>r.date===today).length;
+  const dates=[...new Set(allData.map(r=>r.date))].length;
+  const transfer=allData.filter(r=>r.payMethod==='계좌이체').length;
+  const cash=allData.filter(r=>r.payMethod==='현금지급').length;
+  document.getElementById('kpiGrid').innerHTML=
+    '<div class="kpi-card accent"><div class="kpi-icon">👥</div><div class="kpi-val">'+total+'</div><div class="kpi-label">누적 식수 인원</div></div>'+
+    '<div class="kpi-card"><div class="kpi-icon">📅</div><div class="kpi-val">'+todayCount+'</div><div class="kpi-label">오늘 신청</div></div>'+
+    '<div class="kpi-card"><div class="kpi-icon">🗓️</div><div class="kpi-val">'+dates+'</div><div class="kpi-label">운영 일수</div></div>'+
+    '<div class="kpi-card"><div class="kpi-icon">📱</div><div class="kpi-val">'+transfer+'</div><div class="kpi-label">계좌이체</div></div>'+
+    '<div class="kpi-card"><div class="kpi-icon">💵</div><div class="kpi-val">'+cash+'</div><div class="kpi-label">현금지급</div></div>';
+}
+
+function renderOverviewCharts(){
+  const dateMap={};allData.forEach(r=>{dateMap[r.date]=(dateMap[r.date]||0)+1;});
+  const sortedDates=Object.keys(dateMap).sort();
+  destroyChart('chartDaily');
+  charts.daily=new Chart(document.getElementById('chartDaily'),{type:'bar',data:{labels:sortedDates.map(d=>d.slice(5)),datasets:[{label:'신청',data:sortedDates.map(d=>dateMap[d]),backgroundColor:YUHAN_COLORS[0]+'cc',borderColor:YUHAN_COLORS[0],borderWidth:1.5,borderRadius:5}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,ticks:{stepSize:1}}}}});
+  const payMap={};allData.forEach(r=>{payMap[r.payMethod]=(payMap[r.payMethod]||0)+1;});
+  destroyChart('chartPay');
+  charts.pay=new Chart(document.getElementById('chartPay'),{type:'doughnut',data:{labels:Object.keys(payMap),datasets:[{data:Object.values(payMap),backgroundColor:[YUHAN_COLORS[0],YUHAN_COLORS[2]],borderWidth:2}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom'}}}});
+}
+
+function renderDowTab(){
+  const dowMap={1:[],2:[],3:[],4:[],5:[]};
+  const dateMap={};allData.forEach(r=>{dateMap[r.date]=(dateMap[r.date]||0)+1;});
+  Object.entries(dateMap).forEach(([date,cnt])=>{const dow=getDow(date);if(dow>=1&&dow<=5)dowMap[dow].push(cnt);});
+  const rows=[];
+  document.getElementById('dowCards').innerHTML=[1,2,3,4,5].map(d=>{
+    const vals=dowMap[d];const total=vals.reduce((a,b)=>a+b,0);const avg=vals.length?(total/vals.length).toFixed(1):'0';
+    rows.push({dow:d,name:DAY_NAMES[d],total,cnt:vals.length,avg,maxDate:Object.entries(dateMap).filter(([dt])=>getDow(dt)===d).sort((a,b)=>b[1]-a[1])[0]?.[0]||'-'});
+    return '<div class="dow-card" style="border-top-color:'+DAY_COLORS[d]+'"><div class="dow-name">'+DAY_NAMES[d]+'요일</div><div class="dow-val" style="color:'+DAY_COLORS[d]+'">'+total+'</div><div class="dow-avg">평균 '+avg+'명 / '+vals.length+'회</div></div>';
+  }).join('');
+  destroyChart('chartDow');
+  charts.dow=new Chart(document.getElementById('chartDow'),{type:'bar',data:{labels:[1,2,3,4,5].map(d=>DAY_NAMES[d]+'요일'),datasets:[{label:'총 신청',data:[1,2,3,4,5].map(d=>dowMap[d].reduce((a,b)=>a+b,0)),backgroundColor:[1,2,3,4,5].map(d=>DAY_COLORS[d]+'cc'),borderColor:[1,2,3,4,5].map(d=>DAY_COLORS[d]),borderWidth:1.5,borderRadius:6},{label:'일 평균',data:[1,2,3,4,5].map(d=>{const v=dowMap[d];return v.length?parseFloat((v.reduce((a,b)=>a+b,0)/v.length).toFixed(1)):0;}),backgroundColor:'transparent',borderColor:'#374151',borderWidth:2,type:'line',tension:.4,pointRadius:5}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom'}},scales:{y:{beginAtZero:true}}}});
+  document.getElementById('dowTableBody').innerHTML=rows.map(r=>'<tr><td><b style="color:'+DAY_COLORS[r.dow]+'">'+r.name+'요일</b></td><td><b>'+r.total+'명</b></td><td>'+r.cnt+'회</td><td><b>'+r.avg+'명</b></td><td>'+r.maxDate+'</td></tr>').join('');
+}
+
+function renderDeptTab(){
+  const deptMap={};allData.forEach(r=>{deptMap[r.dept]=(deptMap[r.dept]||0)+1;});
+  const sorted=Object.entries(deptMap).sort((a,b)=>b[1]-a[1]);const total=allData.length;
+  destroyChart('chartDept');
+  charts.dept=new Chart(document.getElementById('chartDept'),{type:'bar',data:{labels:sorted.map(([k])=>k),datasets:[{data:sorted.map(([,v])=>v),backgroundColor:sorted.map((_,i)=>YUHAN_COLORS[i%YUHAN_COLORS.length]+'cc'),borderColor:sorted.map((_,i)=>YUHAN_COLORS[i%YUHAN_COLORS.length]),borderWidth:1.5,borderRadius:5}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,ticks:{stepSize:1}},x:{ticks:{font:{size:10}}}}}});
+  document.getElementById('deptTableBody').innerHTML=sorted.map(([dept,cnt],i)=>'<tr><td><b>'+(i+1)+'</b></td><td>'+dept+'</td><td><b>'+cnt+'명</b></td><td><span class="badge badge-blue">'+(total?(cnt/total*100).toFixed(1):0)+'%</span></td></tr>').join('');
+}
+
+function renderGradeTab(){
+  const gm={'1학년':0,'2학년':0,'3학년':0};allData.forEach(r=>{if(gm[r.grade]!==undefined)gm[r.grade]++;});
+  const total=allData.length;
+  destroyChart('chartGrade');
+  charts.grade=new Chart(document.getElementById('chartGrade'),{type:'doughnut',data:{labels:Object.keys(gm),datasets:[{data:Object.values(gm),backgroundColor:YUHAN_COLORS.slice(0,3),borderWidth:2}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom'}}}});
+  const dates=[...new Set(allData.map(r=>r.date))].sort();const grades=['1학년','2학년','3학년'];
+  destroyChart('chartGradeDaily');
+  charts.gradeDaily=new Chart(document.getElementById('chartGradeDaily'),{type:'line',data:{labels:dates.map(d=>d.slice(5)),datasets:grades.map((g,i)=>({label:g,data:dates.map(d=>allData.filter(r=>r.date===d&&r.grade===g).length),borderColor:YUHAN_COLORS[i],backgroundColor:YUHAN_COLORS[i]+'33',tension:.3,fill:true,pointRadius:3}))},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom'}},scales:{y:{beginAtZero:true,ticks:{stepSize:1}}}}});
+  document.getElementById('gradeTableBody').innerHTML=Object.entries(gm).map(([grade,cnt])=>{
+    const topDept=Object.entries(allData.filter(r=>r.grade===grade).reduce((acc,r)=>{acc[r.dept]=(acc[r.dept]||0)+1;return acc;},{})).sort((a,b)=>b[1]-a[1])[0];
+    return '<tr><td><b>'+grade+'</b></td><td>'+cnt+'명</td><td><span class="badge badge-green">'+(total?((cnt/total)*100).toFixed(1):0)+'%</span></td><td>'+(topDept?topDept[0]:'-')+'</td></tr>';
+  }).join('');
+}
+
+// ── 시간대별 ── allData 사용 (GAS 데이터 반영됨)
+function renderTimeTab(){
+  const df=document.getElementById('timeFilterDate').value;
+  const filtered=df?allData.filter(r=>r.date===df):allData;
+  const slots=[];for(let h=8;h<=10;h++)for(let m=0;m<60;m+=5)slots.push(String(h).padStart(2,'0')+':'+String(m).padStart(2,'0'));
+  const countMap={};slots.forEach(s=>countMap[s]=0);
+  filtered.forEach(r=>{
+    if(!r.applyTime)return;
+    const[h,m]=r.applyTime.split(':').map(Number);
+    const key=String(h).padStart(2,'0')+':'+String(Math.floor(m/5)*5).padStart(2,'0');
+    if(countMap[key]!==undefined)countMap[key]++;
+  });
+  const active=slots.filter(s=>countMap[s]>0);const labels=active.length>0?active:slots.slice(1,13);
+  destroyChart('chartTime');
+  charts.time=new Chart(document.getElementById('chartTime'),{type:'bar',data:{labels,datasets:[{label:'신청',data:labels.map(s=>countMap[s]||0),backgroundColor:YUHAN_COLORS[1]+'cc',borderColor:YUHAN_COLORS[1],borderWidth:1.5,borderRadius:4}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,ticks:{stepSize:1}},x:{ticks:{font:{size:10},maxRotation:45}}}}});
+  let cumul=0;
+  document.getElementById('timeTableBody').innerHTML=labels.map(s=>{const cnt=countMap[s]||0;cumul+=cnt;return cnt>0?'<tr><td>'+s+'</td><td><b>'+cnt+'명</b></td><td>'+cumul+'명</td></tr>':''}).join('')||'<tr><td colspan="3" style="text-align:center;color:var(--gray500)">데이터 없음</td></tr>';
+}
+
+// ── 신청 목록 ── allData 사용
+function renderListTab(){
+  const df=document.getElementById('listFilterDate').value;
+  const search=document.getElementById('listSearch').value.trim().toLowerCase();
+  let filtered=allData;
+  if(df)filtered=filtered.filter(r=>r.date===df);
+  if(search)filtered=filtered.filter(r=>(r.studentId||'').includes(search)||(r.name||'').toLowerCase().includes(search));
+  document.getElementById('listCount').textContent='총 '+filtered.length+'건';
+  const tbody=document.getElementById('listTableBody');
+  if(!filtered.length){tbody.innerHTML='<tr><td colspan="10" style="text-align:center;color:var(--gray500);padding:18px">데이터 없음</td></tr>';return;}
+  tbody.innerHTML=filtered.map((r,i)=>{
+    const payBadge=r.payMethod==='계좌이체'?'<span class="badge badge-blue">이체</span>':'<span class="badge badge-amber">현금</span>';
+    const ts=r.timestamp?new Date(r.timestamp).toLocaleDateString('ko-KR'):'-';
+    return '<tr><td>'+(i+1)+'</td><td>'+ts+'</td><td>'+r.date+'</td><td>'+r.dept+'</td><td>'+r.grade+'</td><td>'+r.studentId+'</td><td>'+r.name+'</td><td>'+r.applyTime+'</td><td style="max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+r.menu+'</td><td>'+payBadge+'</td></tr>';
+  }).join('');
+}
+
+// ══════════════════════════════════════════════════════
+//  서명부 — MENU_DATA + allData 반영
+// ══════════════════════════════════════════════════════
+function buildSignDateSelect(){
+  const sel=document.getElementById('signDateSelect');
+  const operDates=Object.keys(MENU_DATA).sort();
+  sel.innerHTML='<option value="">날짜를 선택하세요</option>'+operDates.map(d=>{
+    const dt=new Date(d);
+    return '<option value="'+d+'">'+d+' ('+DAY_NAMES[dt.getDay()]+') '+MENU_DATA[d].menus.join(' ')+'</option>';
+  }).join('');
+}
+
+function renderSignSheet(){
+  const date=document.getElementById('signDateSelect').value;
+  const wrap=document.getElementById('signSheetWrap');
+  if(!date){wrap.innerHTML='<div style="text-align:center;padding:28px;color:var(--gray500)">날짜를 선택하면 서명부가 생성됩니다</div>';return;}
+  const info=MENU_DATA[date];
+  if(!info){wrap.innerHTML='<div style="padding:20px;color:var(--red)">해당 날짜 메뉴 정보가 없습니다</div>';return;}
+  const menuMain=info.menus.filter(m=>!m.startsWith('(')).join(', ');
+  const brand=info.menus.find(m=>m.startsWith('('))||'';
+  const menuFull=menuMain+(brand?' '+brand:'');
+  const qty=info.qty;
+  const dt=new Date(date);
+  // allData에서 해당 날짜 신청자 추출 (GAS 실데이터 반영)
+  const applicants=allData.filter(r=>r.date===date).sort((a,b)=>a.applyTime>b.applyTime?1:-1);
+  let rows='';
+  for(let i=0;i<qty;i++){
+    const ap=applicants[i];const isReg=!!ap;
+    rows+='<tr class="'+(isReg?'reg':'emp')+'">'+
+      '<td class="td-no">'+(i+1)+'</td>'+
+      '<td class="td-date">'+(i===0?date.replace(/-/g,'.')+'.<br>('+DAY_NAMES[dt.getDay()]+')<br>8:30~10:30':'')+'</td>'+
+      '<td class="td-sid">'+(ap?ap.studentId:'')+'</td>'+
+      '<td class="td-dept">'+(ap?ap.dept:'')+'</td>'+
+      '<td class="td-name">'+(ap?ap.name:'')+'</td>'+
+      '<td class="td-pay" style="color:var(--primary)">'+(ap&&ap.payMethod==='계좌이체'?'✓':'')+'</td>'+
+      '<td class="td-pay" style="color:var(--green)">'+(ap&&ap.payMethod==='현금지급'?'✓':'')+'</td>'+
+      '<td class="td-menu">'+menuFull+'</td>'+
+      '<td class="td-water">생수</td>'+
+    '</tr>';
+  }
+  wrap.innerHTML='<div class="signature-outer">'+
+    '<div class="sign-title-bar"><div><h2>2026년 천원의 아침밥 명단</h2><div class="sign-subtitle">'+date+' | '+menuFull+' | 수량: '+qty+'개 | 신청자: '+applicants.length+'명 / GAS 연동: '+(IS_DEMO?'데모':'실데이터')+'</div></div></div>'+
+    '<div class="sign-wrap"><table class="st">'+
+    '<thead><tr><th style="width:38px">연번</th><th style="width:100px">일자</th><th style="width:88px">학번</th><th style="width:108px">학과</th><th style="width:68px">성명</th><th style="width:44px">이체</th><th style="width:44px">현금</th><th>식단메뉴</th><th style="width:42px">생수</th></tr></thead>'+
+    '<tbody>'+rows+'</tbody></table></div></div>';
+}
+
+function downloadSignExcel(){
+  const date=document.getElementById('signDateSelect').value;
+  if(!date){alert('날짜를 선택해주세요.');return;}
+  const info=MENU_DATA[date];if(!info)return;
+  const menuMain=info.menus.filter(m=>!m.startsWith('(')).join(', ');
+  const brand=info.menus.find(m=>m.startsWith('('))||'';
+  const menuFull=menuMain+(brand?' '+brand:'');
+  const qty=info.qty;
+  const dt=new Date(date);
+  const dateLabel=date.replace(/-/g,'.')+'.('+DAY_NAMES[dt.getDay()]+')\n(8:30 ~ 10:30)';
+  const applicants=allData.filter(r=>r.date===date).sort((a,b)=>a.applyTime>b.applyTime?1:-1);
+  const wb=XLSX.utils.book_new();
+  const wsData=[['2026년 천원의 아침밥 명단'],['연번','일자','학번','학과','성명','이체','현금','식단메뉴','생수']];
+  for(let i=0;i<qty;i++){
+    const ap=applicants[i];
+    wsData.push([i+1,i===0?dateLabel:'',ap?ap.studentId:'',ap?ap.dept:'',ap?ap.name:'',ap&&ap.payMethod==='계좌이체'?'✓':'',ap&&ap.payMethod==='현금지급'?'✓':'',menuFull,'생수']);
+  }
+  const ws=XLSX.utils.aoa_to_sheet(wsData);
+  ws['!cols']=[{wch:6},{wch:18},{wch:13},{wch:20},{wch:10},{wch:7},{wch:7},{wch:22},{wch:7}];
+  ws['!rows']=[{hpt:18},{hpt:16},...Array(qty).fill({hpt:21})];
+  XLSX.utils.book_append_sheet(wb,ws,date.slice(5).replace('-','.'));
+  XLSX.writeFile(wb,'천원의아침밥_서명부_'+date+'.xlsx');
+}
+
+function printSignSheet(){
+  const date=document.getElementById('signDateSelect').value;
+  if(!date){alert('날짜를 선택해주세요.');return;}
+  window.print();
+}
+
+// ══════════════════════════════════════════════════════
+//  점검표 — allData 반영 + 수동 입력 행
+// ══════════════════════════════════════════════════════
+function renderChecklist(){
+  const target=parseInt(document.getElementById('checkTarget').value)||6000;
+  const monthMap={1:0,2:0,3:0,4:0,5:0,6:0,7:0,8:0,9:0,10:0,11:0,12:0};
+  allData.forEach(r=>{if(!r.date)return;const m=parseInt(r.date.split('-')[1]);monthMap[m]=(monthMap[m]||0)+1;});
+  const m123=monthMap[1]+monthMap[2]+monthMap[3];
+  const firstHalf=m123+monthMap[4]+monthMap[5]+monthMap[6];
+  const totalAll=Object.values(monthMap).reduce((a,b)=>a+b,0);
+  const pctHalf=target>0?(firstHalf/target*100).toFixed(1):0;
+  const pctAll=target>0?(totalAll/target*100).toFixed(1):0;
+
+  document.getElementById('checkSummary').innerHTML=
+    '<div class="check-kpi"><div class="ck-val">'+totalAll.toLocaleString()+'</div><div class="ck-label">누적 식수 인원 (자동)</div></div>'+
+    '<div class="check-kpi"><div class="ck-val">'+target.toLocaleString()+'</div><div class="ck-label">확정인원(식수)</div></div>'+
+    '<div class="check-kpi" style="border-color:var(--green);background:#f0fdf4"><div class="ck-val" style="color:#166534">'+pctHalf+'%</div><div class="ck-label">달성율(상반기)</div></div>'+
+    '<div class="check-kpi" style="border-color:var(--orange);background:#fff7ed"><div class="ck-val" style="color:#9a3412">'+pctAll+'%</div><div class="ck-label">달성율(전체)</div></div>';
+
+  // 기존 수동 입력값 보존
+  const manualVals=getManualCheckVals();
+
+  // 자동 집계 행 (신청 시스템 데이터)
+  const autoRow='<tr>'+
+    '<td class="label">유한대학교 <span style="font-size:9px;color:var(--primary);font-weight:600">(자동집계)</span></td>'+
+    '<td class="val">'+target.toLocaleString()+'</td>'+
+    '<td class="val">'+m123+'</td>'+
+    [4,5,6,7,8,9,10,11,12].map(m=>'<td class="val">'+(monthMap[m]||0)+'</td>').join('')+
+    '<td class="pct'+(pctHalf<50?' low':'')+'">'+pctHalf+'%</td>'+
+    '<td class="pct'+(pctAll<50?' low':'')+'">'+pctAll+'%</td>'+
+  '</tr>';
+
+  // 수동 입력 행 (관리자 직접 입력)
+  const manualRow='<tr style="background:#fffbeb;">'+
+    '<td class="label" style="color:var(--amber)">유한대학교 <span style="font-size:9px;color:var(--amber);font-weight:600">(수동입력)</span></td>'+
+    '<td class="val-input"><input type="number" id="mTarget" value="'+(manualVals.target||target)+'" onchange="calcManualRow()" style="width:70px;padding:4px 6px;border:1.5px solid var(--amber);border-radius:5px;font-size:11px;text-align:center;font-family:inherit"></td>'+
+    ['m123','m4','m5','m6','m7','m8','m9','m10','m11','m12'].map((id,i)=>
+      '<td class="val-input"><input type="number" id="'+id+'" value="'+(manualVals[id]||'')+'" onchange="calcManualRow()" style="width:55px;padding:4px 6px;border:1.5px solid var(--amber);border-radius:5px;font-size:11px;text-align:center;font-family:inherit" placeholder="0"></td>'
+    ).join('')+
+    '<td class="pct" id="mPctHalf">—</td>'+
+    '<td class="pct" id="mPctAll">—</td>'+
+  '</tr>';
+
+  document.getElementById('checkTableBody').innerHTML=autoRow+manualRow;
+  calcManualRow();
+}
+
+function getManualCheckVals(){
+  return LS.get('checklist_manual',{});
+}
+
+function calcManualRow(){
+  const t=parseInt(document.getElementById('mTarget')?.value)||0;
+  const ids=['m123','m4','m5','m6','m7','m8','m9','m10','m11','m12'];
+  const vals={target:t};
+  ids.forEach(id=>{vals[id]=parseInt(document.getElementById(id)?.value)||0;});
+  LS.set('checklist_manual',vals);
+  const firstHalf=vals.m123+vals.m4+vals.m5+vals.m6;
+  const totalAll=ids.map(id=>vals[id]).reduce((a,b)=>a+b,0);
+  const ph=document.getElementById('mPctHalf');
+  const pa=document.getElementById('mPctAll');
+  if(ph) ph.textContent=t>0?(firstHalf/t*100).toFixed(1)+'%':'—';
+  if(pa) pa.textContent=t>0?(totalAll/t*100).toFixed(1)+'%':'—';
+}
+
+function downloadChecklistExcel(){
+  const target=parseInt(document.getElementById('checkTarget').value)||6000;
+  const monthMap={1:0,2:0,3:0,4:0,5:0,6:0,7:0,8:0,9:0,10:0,11:0,12:0};
+  allData.forEach(r=>{if(!r.date)return;const m=parseInt(r.date.split('-')[1]);monthMap[m]=(monthMap[m]||0)+1;});
+  const m123=monthMap[1]+monthMap[2]+monthMap[3];
+  const firstHalf=m123+monthMap[4]+monthMap[5]+monthMap[6];
+  const totalAll=Object.values(monthMap).reduce((a,b)=>a+b,0);
+  // 수동 입력값
+  const mv=getManualCheckVals();
+  const mTarget=mv.target||target;
+  const mM123=mv.m123||0;
+  const mMonths=[mv.m4||0,mv.m5||0,mv.m6||0,mv.m7||0,mv.m8||0,mv.m9||0,mv.m10||0,mv.m11||0,mv.m12||0];
+  const mFirst=mM123+mMonths[0]+mMonths[1]+mMonths[2];
+  const mTotal=mM123+mMonths.reduce((a,b)=>a+b,0);
+
+  const wb=XLSX.utils.book_new();
+  const wsData=[
+    [null,'2026년 천원의 아침밥 식수인원 실적 점검표'],
+    [],
+    [null,'대학명','확정인원(식수)','1~3월','4월','5월','6월','7월','8월','9월','10월','11월','12월','달성율(상반기)','달성율(전체)'],
+    [null,'유한대학교(자동집계)',target,m123,monthMap[4],monthMap[5],monthMap[6],monthMap[7],monthMap[8],monthMap[9],monthMap[10],monthMap[11],monthMap[12],firstHalf/target,totalAll/target],
+    [null,'유한대학교(수동입력)',mTarget,mM123,...mMonths,mTarget>0?mFirst/mTarget:0,mTarget>0?mTotal/mTarget:0],
+    [],
+    [null,'※ 학교 집계/정산 일정상의 이유로 식수인원 확인이 5일까지 불가능한 경우 업로드 예정일을 작성하여 주시기 바랍니다.']
+  ];
+  const ws=XLSX.utils.aoa_to_sheet(wsData);
+  ['N4','O4','N5','O5'].forEach(cell=>{if(ws[cell])ws[cell].z='0.00%';});
+  ws['!cols']=[{wch:3},{wch:20},{wch:14},{wch:8},{wch:8},{wch:8},{wch:8},{wch:8},{wch:8},{wch:8},{wch:8},{wch:8},{wch:8},{wch:14},{wch:12}];
+  XLSX.utils.book_append_sheet(wb,ws,'양식');
+  XLSX.writeFile(wb,'2026년_천원의_아침밥_식수인원_실적_점검표.xlsx');
+}
+
+// ══════════════════════════════════════════════════════
+//  설정 저장 — GAS 시트에 반영
+// ══════════════════════════════════════════════════════
+function initSettingsUI(){
+  const t=LS.get('time_settings',{start:'08:30',end:'10:30'});
+  document.getElementById('setStartTime').value=t.start||'08:30';
+  document.getElementById('setEndTime').value=t.end||'10:30';
+  const so=LS.get('soldout_settings',{manual:false,msg:'금일 천원의 아침밥 판매가 종료되었습니다. 감사합니다.'});
+  document.getElementById('toggleSoldOutCheck').checked=so.manual||false;
+  document.getElementById('setSoldOutMsg').value=so.msg||'금일 천원의 아침밥 판매가 종료되었습니다. 감사합니다.';
+  const acct=LS.get('account',{bank:'카카오뱅크',no:'3333-13-8457612',owner:'최 광 균',amt:'1,000원'});
+  document.getElementById('setBankName').value=acct.bank;
+  document.getElementById('setBankNo').value=acct.no;
+  document.getElementById('setBankOwner').value=acct.owner;
+  document.getElementById('setBankAmt').value=acct.amt;
+}
+
+function saveTimeSettings(){
+  const s={start:document.getElementById('setStartTime').value,end:document.getElementById('setEndTime').value};
+  LS.set('time_settings',s);
+  if(!IS_DEMO) fetchFromGAS({action:'saveSettings',startTime:s.start,endTime:s.end},()=>{});
+  showMsg('timeSaveMsg');
+}
+
+function applyManualSoldOut(){
+  const so=LS.get('soldout_settings',{manual:false,msg:'금일 천원의 아침밥 판매가 종료되었습니다. 감사합니다.'});
+  so.manual=document.getElementById('toggleSoldOutCheck').checked;
+  LS.set('soldout_settings',so);
+  renderLive();renderAllDatesTable();
+}
+
+function saveSoldOutSettings(){
+  const so=LS.get('soldout_settings',{manual:false,msg:''});
+  so.msg=document.getElementById('setSoldOutMsg').value;
+  so.manual=document.getElementById('toggleSoldOutCheck').checked;
+  LS.set('soldout_settings',so);
+  renderLive();renderAllDatesTable();
+  showMsg('soSaveMsg');
+}
+
+function saveAccountSettings(){
+  const acct={bank:document.getElementById('setBankName').value,no:document.getElementById('setBankNo').value,owner:document.getElementById('setBankOwner').value,amt:document.getElementById('setBankAmt').value};
+  LS.set('account',acct);
+  if(!IS_DEMO) fetchFromGAS({action:'saveSettings',bank:acct.bank,bankNo:acct.no,bankOwner:acct.owner,bankAmt:acct.amt},()=>{});
+  showMsg('acctSaveMsg');
+}
+
+// ── 식단 저장 — localStorage + GAS 시트 동시 반영 ──
+function saveMenuDataFull(){
+  const rows=document.querySelectorAll('#menuEditorBody tr');
+  const newData={};
+  rows.forEach(tr=>{
+    const inputs=tr.querySelectorAll('input');
+    const date=inputs[0].value.trim();
+    const menuStr=inputs[1].value.trim();
+    const qty=parseInt(inputs[2].value)||100;
+    if(date&&menuStr) newData[date]={menus:menuStr.split(',').map(m=>m.trim()),qty};
+  });
+  MENU_DATA=newData;
+  LS.set('menu',MENU_DATA); // localStorage 즉시 반영
+
+  if(IS_DEMO){
+    showMsg('menuSaveMsg');
+    buildLiveDateTabs();buildSignDateSelect();renderAllDatesTable();renderChecklist();
+    return;
+  }
+
+  // GAS 스프레드시트 식단 시트 업데이트
+  document.getElementById('menuSaveMsg').style.display='none';
+  document.getElementById('menuSaveErr').style.display='none';
+
+  fetchFromGAS({action:'saveMenu',menuJson:JSON.stringify(MENU_DATA)},function(res,err){
+    if(!err&&res&&res.status==='ok'){
+      showMsg('menuSaveMsg');
+    } else {
+      const errEl=document.getElementById('menuSaveErr');
+      errEl.textContent='❌ GAS 저장 실패: '+(err||JSON.stringify(res));
+      errEl.style.display='block';
+    }
+    buildLiveDateTabs();buildSignDateSelect();renderAllDatesTable();renderChecklist();
+  });
+}
+
+function renderMenuEditor(){
+  document.getElementById('menuEditorBody').innerHTML=Object.entries(MENU_DATA).sort().map(([date,info])=>
+    '<tr><td><input type="text" value="'+date+'" style="width:110px"></td><td><input type="text" value="'+info.menus.join(', ')+'" style="width:100%"></td><td><input type="number" value="'+info.qty+'" style="width:55px;text-align:center"></td><td><button class="del-row-btn" onclick="this.closest(\'tr\').remove()">삭제</button></td></tr>'
+  ).join('');
+}
+
+function addMenuRow(){
+  const tbody=document.getElementById('menuEditorBody');
+  const tr=document.createElement('tr');
+  tr.innerHTML='<td><input type="text" placeholder="YYYY-MM-DD" style="width:110px"></td><td><input type="text" placeholder="메뉴명" style="width:100%"></td><td><input type="number" value="100" style="width:55px;text-align:center"></td><td><button class="del-row-btn" onclick="this.closest(\'tr\').remove()">삭제</button></td>';
+  tbody.appendChild(tr);
+}
+
+function uploadMenuFile(input){
+  const file=input.files[0];if(!file)return;
+  const reader=new FileReader();
+  reader.onload=function(e){
+    try{
+      const wb=XLSX.read(e.target.result,{type:'binary'});
+      const ws=wb.Sheets[wb.SheetNames[0]];
+      const rows=XLSX.utils.sheet_to_json(ws,{header:1});
+      const newData={};
+      rows.forEach(row=>{if(!row[0]||!row[1])return;const dateStr=String(row[0]).trim();const menuStr=String(row[1]).trim();const qty=parseInt(row[2])||100;if(/^\d{4}-\d{2}-\d{2}$/.test(dateStr))newData[dateStr]={menus:menuStr.split(',').map(m=>m.trim()),qty};});
+      if(Object.keys(newData).length>0){MENU_DATA={...MENU_DATA,...newData};LS.set('menu',MENU_DATA);renderMenuEditor();alert('✅ '+Object.keys(newData).length+'개 식단 업로드 완료. 저장 버튼을 눌러 시트에 반영하세요.');}
+      else alert('⚠️ 유효 데이터 없음');
+    }catch(err){alert('오류: '+err.message);}
+  };
+  reader.readAsBinaryString(file);input.value='';
+}
+
+function showMsg(id){const el=document.getElementById(id);el.style.display='block';setTimeout(()=>el.style.display='none',3000);}
+
+// ── CSV 내보내기 ──
+function exportCSV(){
+  const headers=['신청일','이용일','학과','학년','학번','성명','신청시간','메뉴','결제방법'];
+  const rows=allData.map(r=>[r.timestamp?new Date(r.timestamp).toLocaleDateString('ko-KR'):'',r.date||'',r.dept||'',r.grade||'',r.studentId||'',r.name||'',r.applyTime||'','"'+(r.menu||'')+'"',r.payMethod||'']);
+  const csv=[headers,...rows].map(r=>r.join(',')).join('\n');
+  const blob=new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='천원의아침밥_'+fDate(new Date())+'.csv';a.click();
+}
+
+// ── 데모용 샘플 데이터 ──
+function generateSampleData(){
+  const depts=['기계시스템전공','전기공학전공','컴퓨터소프트웨어전공','식품영양학과','경영정보전공','치위생과','작업치료과','반려동물보건학과','사회복지전공','항공경영전공'];
+  const grades=['1학년','2학년','3학년'];
+  const pays=['계좌이체','현금지급'];
+  const operDates=Object.keys(MENU_DATA).sort();
+  const rows=[];let sid=2024001;
+  for(let i=0;i<120;i++){
+    const d=operDates[Math.floor(Math.random()*operDates.length)];
+    const h=8+Math.floor(Math.random()*2);const m5=Math.floor(Math.random()*12)*5;const s=Math.floor(Math.random()*60);
+    rows.push({timestamp:new Date(d).toISOString(),date:d,dept:depts[Math.floor(Math.random()*depts.length)],grade:grades[Math.floor(Math.random()*grades.length)],studentId:String(sid++),name:'학생'+(i+1),applyTime:String(h).padStart(2,'0')+':'+String(m5).padStart(2,'0')+':'+String(s).padStart(2,'0'),menu:(MENU_DATA[d]?.menus||['—']).join(' '),payMethod:pays[Math.floor(Math.random()*pays.length)]});
+  }
+  return rows;
+}
+
+// ── 자동 갱신 (60초) ──
+function startAutoRefresh(){
+  if(liveRefreshTimer)clearInterval(liveRefreshTimer);
+  liveRefreshTimer=setInterval(()=>{
+    if(!IS_DEMO){
+      // GAS에서 신청 데이터만 갱신 (식단은 변경 빈도 낮음)
+      fetchFromGAS({action:'getAll'},function(data,err){
+        if(!err&&Array.isArray(data)){allData=data;}
+        renderLive();renderAllDatesTable();renderKPI();
+      });
+    }
+  },60000);
+}
+
+document.addEventListener('DOMContentLoaded',function(){loadAll();startAutoRefresh();});
+</script>
+</body>
+</html>
