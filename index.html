@@ -409,7 +409,8 @@ input:checked+.toggle-slider:before{transform:translateX(20px)}
 // ══════════════════════════════════════════════════════
 //  ⚙️ GAS URL — 배포 후 교체
 // ══════════════════════════════════════════════════════
-const GAS_URL = 'https://script.google.com/macros/s/AKfycbxNTGgNwgfpbS5NhCOCqrJ_-lFF7EaWm0iJLVcuXlnD4p2CNmf7ULD2mCdBn8-Pzfw2/exec';
+const GAS_URL = 'https://script.google.com/macros/s/YOUR_DEPLOYMENT_ID/exec';
+
 const YUHAN_COLORS = ['#1d4ed8','#f97316','#22c55e','#f59e0b','#5b8dee','#ef4444','#8b5cf6','#06b6d4','#ec4899','#84cc16'];
 const DAY_NAMES = ['일','월','화','수','목','금','토'];
 const DAY_COLORS = ['','#ef4444','#f97316','#22c55e','#1d4ed8','#8b5cf6'];
@@ -666,6 +667,16 @@ function toggleSoldOut(){
   so.manual=!so.manual;
   LS.set('soldout_settings',so);
   document.getElementById('toggleSoldOutCheck').checked=so.manual;
+  // ✅ GAS 스프레드시트에 즉시 저장 (학생 화면에 반영)
+  if(!IS_DEMO){
+    fetchFromGAS({action:'saveSettings',soldoutManual:String(so.manual),soldoutMsg:so.msg},function(res,err){
+      if(!err&&res&&res.status==='ok'){
+        console.log('판매종료 GAS 저장 완료:', so.manual);
+      } else {
+        console.warn('판매종료 GAS 저장 실패:', err||JSON.stringify(res));
+      }
+    });
+  }
   renderLive(); renderAllDatesTable();
 }
 
@@ -972,6 +983,10 @@ function applyManualSoldOut(){
   const so=LS.get('soldout_settings',{manual:false,msg:'금일 천원의 아침밥 판매가 종료되었습니다. 감사합니다.'});
   so.manual=document.getElementById('toggleSoldOutCheck').checked;
   LS.set('soldout_settings',so);
+  // ✅ GAS 즉시 전송
+  if(!IS_DEMO){
+    fetchFromGAS({action:'saveSettings',soldoutManual:String(so.manual),soldoutMsg:so.msg},()=>{});
+  }
   renderLive();renderAllDatesTable();
 }
 
@@ -980,8 +995,15 @@ function saveSoldOutSettings(){
   so.msg=document.getElementById('setSoldOutMsg').value;
   so.manual=document.getElementById('toggleSoldOutCheck').checked;
   LS.set('soldout_settings',so);
+  // ✅ GAS 스프레드시트에 저장 (학생 화면 반영)
+  if(!IS_DEMO){
+    fetchFromGAS({action:'saveSettings',soldoutManual:String(so.manual),soldoutMsg:so.msg},function(res,err){
+      showMsg((!err&&res&&res.status==='ok')?'soSaveMsg':'soSaveErr');
+    });
+  } else {
+    showMsg('soSaveMsg');
+  }
   renderLive();renderAllDatesTable();
-  showMsg('soSaveMsg');
 }
 
 function saveAccountSettings(){
