@@ -363,7 +363,7 @@ input:checked+.toggle-slider:before{transform:translateX(20px)}
 <div class="tab-content" id="tab-settings">
   <div class="settings-section">
     <h3>⏰ 신청 시간 설정</h3>
-    <div class="setting-row"><span class="setting-label">신청 시작 시간</span><input class="setting-input" type="time" id="setStartTime" value="08:30" style="max-width:140px"><span style="font-size:11px;color:var(--gray500)">이 시간 이전 접속 시 학생화면에 안내</span></div>
+    <div class="setting-row"><span class="setting-label">신청 시작 시간</span><input class="setting-input" type="time" id="setStartTime" value="08:25" style="max-width:140px"><span style="font-size:11px;color:var(--gray500)">이 시간 이전 접속 시 학생화면에 안내</span></div>
     <div class="setting-row"><span class="setting-label">신청 종료 시간</span><input class="setting-input" type="time" id="setEndTime" value="10:30" style="max-width:140px"></div>
     <button class="save-btn" onclick="saveTimeSettings()">💾 시간 저장</button>
     <div id="timeSaveMsg" style="font-size:11px;color:var(--green);margin-top:7px;display:none">✅ 저장되었습니다.</div>
@@ -811,7 +811,7 @@ function renderSignSheet(){
     const ap=applicants[i];const isReg=!!ap;
     rows+='<tr class="'+(isReg?'reg':'emp')+'">'+
       '<td class="td-no">'+(i+1)+'</td>'+
-      '<td class="td-date">'+(i===0?date.replace(/-/g,'.')+'.<br>('+DAY_NAMES[dt.getDay()]+')<br>8:30~10:30':'')+'</td>'+
+      '<td class="td-date">'+(i===0?date.replace(/-/g,'.')+'.<br>('+DAY_NAMES[dt.getDay()]+')<br>8:25~10:30':'')+'</td>'+
       '<td class="td-sid">'+(ap?ap.studentId:'')+'</td>'+
       '<td class="td-dept">'+(ap?ap.dept:'')+'</td>'+
       '<td class="td-name">'+(ap?ap.name:'')+'</td>'+
@@ -837,10 +837,10 @@ function downloadSignExcel(){
   const menuFull=menuMain+(brand?' '+brand:'');
   const qty=info.qty;
   const dt=new Date(date);
-  const dateLabel=date.replace(/-/g,'.')+'.('+DAY_NAMES[dt.getDay()]+')\n(8:30 ~ 10:30)';
+  const dateLabel=date.replace(/-/g,'.')+'.('+DAY_NAMES[dt.getDay()]+')\n(8:25 ~ 10:30)';
   const applicants=allData.filter(r=>r.date===date).sort((a,b)=>a.applyTime>b.applyTime?1:-1);
   const wb=XLSX.utils.book_new();
-  const wsData=[['2026년 천원의 아침밥 명단'],['연번','일자','학번','학과','성명','이체','현금','식단메뉴','생수']];
+  const wsData=[['2026년 천원의 아침밥 명단'],['연번','일자','학과','학번','성명','이체','현금','식단메뉴','생수']];
   for(let i=0;i<qty;i++){
     const ap=applicants[i];
     wsData.push([i+1,i===0?dateLabel:'',ap?ap.studentId:'',ap?ap.dept:'',ap?ap.name:'',ap&&ap.payMethod==='계좌이체'?'✓':'',ap&&ap.payMethod==='현금지급'?'✓':'',menuFull,'생수']);
@@ -959,8 +959,8 @@ function downloadChecklistExcel(){
 //  설정 저장 — GAS 시트에 반영
 // ══════════════════════════════════════════════════════
 function initSettingsUI(){
-  const t=LS.get('time_settings',{start:'08:30',end:'10:30'});
-  document.getElementById('setStartTime').value=t.start||'08:30';
+  const t=LS.get('time_settings',{start:'08:25',end:'10:30'});
+  document.getElementById('setStartTime').value=t.start||'08:25';
   document.getElementById('setEndTime').value=t.end||'10:30';
   const so=LS.get('soldout_settings',{manual:false,msg:'금일 천원의 아침밥 판매가 종료되었습니다. 감사합니다.'});
   document.getElementById('toggleSoldOutCheck').checked=so.manual||false;
