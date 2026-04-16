@@ -293,16 +293,10 @@ input:checked+.toggle-slider:before{transform:translateX(20px)}
 <!-- ③ 요일별 -->
 <div class="tab-content" id="tab-dow">
   <div class="dow-grid" id="dowCards"></div>
-  <div class="chart-grid">
-    <div class="chart-panel" style="grid-column:1/-1"><h3>📅 요일별 신청 인원</h3><div class="chart-wrap" style="height:230px"><canvas id="chartDow"></canvas></div></div>
-  </div>
-  <div class="table-panel">
-    <div class="table-panel-header"><h3>요일별 상세</h3></div>
-    <table><thead><tr><th>요일</th><th>총 신청</th><th>운영일수</th><th>일 평균</th><th>최다 신청일</th></tr></thead><tbody id="dowTableBody"></tbody></table>
-  </div>
-  <div class="table-panel" style="margin-top:12px">
-    <div class="table-panel-header">
-      <h3>🏫 요일별 학과 신청 현황</h3>
+  <!-- 요일별 학과 현황: 상위 10개 가로 바 그래프 + 전체 테이블 -->
+  <div class="chart-panel" style="margin-bottom:14px">
+    <h3>🏫 요일별 학과 신청 상위 10개</h3>
+    <div style="display:flex;gap:7px;margin-bottom:9px;flex-wrap:wrap">
       <select id="dowDeptSelect" onchange="renderDowDeptTable()" style="padding:4px 8px;border:1.5px solid var(--gray200);border-radius:6px;font-size:11px;font-family:inherit;background:#fff">
         <option value="">전체 요일</option>
         <option value="1">월요일</option>
@@ -312,6 +306,10 @@ input:checked+.toggle-slider:before{transform:translateX(20px)}
         <option value="5">금요일</option>
       </select>
     </div>
+    <div id="chartDowDeptWrap" style="position:relative;height:280px"><canvas id="chartDowDept"></canvas></div>
+  </div>
+  <div class="table-panel">
+    <div class="table-panel-header"><h3>🏫 요일별 학과 신청 현황 (전체)</h3></div>
     <div style="overflow-x:auto"><table>
       <thead><tr><th>순위</th><th>학과</th><th>월</th><th>화</th><th>수</th><th>목</th><th>금</th><th>합계</th></tr></thead>
       <tbody id="dowDeptTableBody"></tbody>
@@ -340,6 +338,14 @@ input:checked+.toggle-slider:before{transform:translateX(20px)}
 
 <!-- ⑤ 학년별 -->
 <div class="tab-content" id="tab-grade">
+  <div class="date-filter">
+    <label>기간 필터</label>
+    <input type="date" id="gradeDateFrom">
+    <span style="font-size:11px;color:var(--gray500)">~</span>
+    <input type="date" id="gradeDateTo">
+    <button class="filter-btn" onclick="renderGradeTab()">조회</button>
+    <button class="filter-btn" style="background:var(--gray500)" onclick="clearGradeFilter()">전체</button>
+  </div>
   <div class="chart-grid">
     <div class="chart-panel"><h3>📚 학년별</h3><div class="chart-wrap"><canvas id="chartGrade"></canvas></div></div>
     <div class="chart-panel"><h3>📈 학년별 추이</h3><div class="chart-wrap"><canvas id="chartGradeDaily"></canvas></div></div>
@@ -355,8 +361,9 @@ input:checked+.toggle-slider:before{transform:translateX(20px)}
   <div class="date-filter">
     <label>날짜</label><input type="date" id="timeFilterDate">
     <button class="filter-btn" onclick="renderTimeTab()">조회</button>
+    <button class="filter-btn" style="background:var(--gray500)" onclick="document.getElementById('timeFilterDate').value='';renderTimeTab()">전체</button>
   </div>
-  <div class="chart-panel" style="margin-bottom:12px"><h3>⏰ 5분 단위 신청 분포</h3><div style="position:relative;height:240px"><canvas id="chartTime"></canvas></div></div>
+  <div class="chart-panel" style="margin-bottom:12px"><h3>⏰ 5분 단위 신청 분포 (08:00~13:00)</h3><div style="position:relative;height:260px"><canvas id="chartTime"></canvas></div></div>
   <div class="table-panel">
     <div class="table-panel-header"><h3>시간대별 상세</h3></div>
     <table><thead><tr><th>시간대</th><th>신청 인원</th><th>누적</th></tr></thead><tbody id="timeTableBody"></tbody></table>
@@ -581,22 +588,23 @@ function getDefaultMenuData() {
 //  GAS JSONP
 // ══════════════════════════════════════════════════════
 function fetchFromGAS(params, callback) {
-  const cbName = 'cb_'+Date.now()+'_'+Math.random().toString(36).slice(2);
-  const script = document.createElement('script');
-  const timeout = setTimeout(()=>{
-    delete window[cbName];
-    if(document.body.contains(script)) document.body.removeChild(script);
-    callback(null, 'timeout');
-  }, 25000);  // GAS 콜드스타트 대비 25초
-  window[cbName] = function(data){
-    clearTimeout(timeout);
-    delete window[cbName];
-    if(document.body.contains(script)) document.body.removeChild(script);
-    callback(data, null);
-  };
-  const qParts=Object.entries({...params,callback:cbName}).map(([k,v])=>encodeURIComponent(k)+'='+encodeURIComponent(v)).join('&');
-  script.src = GAS_URL+'?'+qParts;
-  document.body.appendChild(script);
+  const qParts = Object.entries(params)
+    .map(([k,v]) => encodeURIComponent(k)+'='+encodeURIComponent(v))
+    .join('&');
+  const timeoutMs = (params.action === 'getAll') ? 25000 : 15000;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  fetch(GAS_URL + '?' + qParts, {
+    method: 'GET',
+    mode: 'cors',
+    signal: controller.signal
+  })
+  .then(r => { clearTimeout(timer); if(!r.ok) throw new Error(r.status); return r.json(); })
+  .then(data => callback(data, null))
+  .catch(err => {
+    clearTimeout(timer);
+    callback(null, err.name==='AbortError' ? 'timeout' : 'error');
+  });
 }
 
 // ── 로딩 바 ──
@@ -636,27 +644,36 @@ function loadAll() {
     return;
   }
 
-  // GAS에서 식단 먼저, 그 다음 신청 데이터 로드 (순차)
-  fetchFromGAS({action:'getMenu'}, function(menuRes, menuErr){
+  // ★ getMenu + getAll 병렬 실행 → 로드 시간 단축
+  let menuDone = false, allDone = false;
+
+  function onBothDone() {
+    if (!menuDone || !allDone) return;
+    renderAll();
+    loadingDone();
+  }
+
+  fetchFromGAS({action:'getMenu'}, function(menuRes, menuErr) {
     if (!menuErr && menuRes && menuRes.status==='ok' && menuRes.data && Object.keys(menuRes.data).length > 0) {
       MENU_DATA = menuRes.data;
-      LS.set('menu', MENU_DATA); // 캐시 저장
+      LS.set('menu', MENU_DATA);
     } else {
-      // GAS 식단 없으면 localStorage → 기본값 순으로 fallback
       MENU_DATA = LS.get('menu', getDefaultMenuData());
     }
+    menuDone = true;
+    onBothDone();
+  });
 
-    fetchFromGAS({action:'getAll'}, function(data, err){
-      if (!err && Array.isArray(data)) {
-        allData = data;
-        setGasStatus(true);
-      } else {
-        allData = [];
-        setGasStatus(false);
-      }
-      renderAll();
-      loadingDone();
-    });
+  fetchFromGAS({action:'getAll'}, function(data, err) {
+    if (!err && Array.isArray(data)) {
+      allData = data;
+      setGasStatus(true);
+    } else {
+      allData = [];
+      setGasStatus(false);
+    }
+    allDone = true;
+    onBothDone();
   });
 }
 
@@ -668,6 +685,18 @@ function switchTab(id){
   document.querySelectorAll('.tab-item').forEach((el,i)=>el.classList.toggle('active',ids[i]===id));
   document.querySelectorAll('.tab-content').forEach(el=>el.classList.remove('active'));
   document.getElementById('tab-'+id).classList.add('active');
+  // 탭 전환 시 최신 allData로 해당 탭 렌더
+  if(allData.length > 0){
+    if(id==='overview') { renderKPI(); renderOverviewCharts(); }
+    else if(id==='dow')  renderDowTab();
+    else if(id==='dept') renderDeptTab();
+    else if(id==='grade') renderGradeTab();
+    else if(id==='time') renderTimeTab();
+    else if(id==='list') renderListTab();
+    else if(id==='checklist') renderChecklist();
+    else if(id==='sign') buildSignDateSelect();
+    else if(id==='oper') renderAllDatesTable();
+  }
 }
 
 // ── 날짜 유틸 ──
@@ -885,22 +914,65 @@ function renderDowTab(){
   const dowMap={1:[],2:[],3:[],4:[],5:[]};
   const dateMap={};allData.forEach(r=>{dateMap[r.date]=(dateMap[r.date]||0)+1;});
   Object.entries(dateMap).forEach(([date,cnt])=>{const dow=getDow(date);if(dow>=1&&dow<=5)dowMap[dow].push(cnt);});
-  const rows=[];
   document.getElementById('dowCards').innerHTML=[1,2,3,4,5].map(d=>{
     const vals=dowMap[d];const total=vals.reduce((a,b)=>a+b,0);const avg=vals.length?(total/vals.length).toFixed(1):'0';
-    rows.push({dow:d,name:DAY_NAMES[d],total,cnt:vals.length,avg,maxDate:Object.entries(dateMap).filter(([dt])=>getDow(dt)===d).sort((a,b)=>b[1]-a[1])[0]?.[0]||'-'});
     return '<div class="dow-card" style="border-top-color:'+DAY_COLORS[d]+'"><div class="dow-name">'+DAY_NAMES[d]+'요일</div><div class="dow-val" style="color:'+DAY_COLORS[d]+'">'+total+'</div><div class="dow-avg">평균 '+avg+'명 / '+vals.length+'회</div></div>';
   }).join('');
-  destroyChart('chartDow');
-  charts.dow=safeChart('chartDow',{type:'bar',data:{labels:[1,2,3,4,5].map(d=>DAY_NAMES[d]+'요일'),datasets:[{label:'총 신청',data:[1,2,3,4,5].map(d=>dowMap[d].reduce((a,b)=>a+b,0)),backgroundColor:[1,2,3,4,5].map(d=>DAY_COLORS[d]+'cc'),borderColor:[1,2,3,4,5].map(d=>DAY_COLORS[d]),borderWidth:1.5,borderRadius:6},{label:'일 평균',data:[1,2,3,4,5].map(d=>{const v=dowMap[d];return v.length?parseFloat((v.reduce((a,b)=>a+b,0)/v.length).toFixed(1)):0;}),backgroundColor:'transparent',borderColor:'#374151',borderWidth:2,type:'line',tension:.4,pointRadius:5}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom'}},scales:{y:{beginAtZero:true}}}});
-  document.getElementById('dowTableBody').innerHTML=rows.map(r=>'<tr><td><b style="color:'+DAY_COLORS[r.dow]+'">'+esc(r.name)+'요일</b></td><td><b>'+r.total+'명</b></td><td>'+r.cnt+'회</td><td><b>'+r.avg+'명</b></td><td>'+esc(r.maxDate)+'</td></tr>').join('');
   renderDowDeptTable();
+}
+
+function renderDowDeptChart(){
+  const selVal=document.getElementById('dowDeptSelect')?.value||'';
+  const dowFilter=selVal?parseInt(selVal):null;
+  // 학과별 집계
+  const deptMap={};
+  allData.forEach(r=>{
+    const dow=getDow(r.date);
+    if(dow<1||dow>5) return;
+    if(dowFilter!==null&&dow!==dowFilter) return;
+    deptMap[r.dept]=(deptMap[r.dept]||0)+1;
+  });
+  const sorted=Object.entries(deptMap).sort((a,b)=>b[1]-a[1]).slice(0,10);
+  const total=sorted.reduce((s,[,v])=>s+v,0);
+  destroyChart('chartDowDept');
+  if(!sorted.length){
+    document.getElementById('chartDowDept')?.getContext('2d');
+    return;
+  }
+  const el=document.getElementById('chartDowDept');
+  if(!el) return;
+  // 차트 컨테이너 높이 학과수에 맞게
+  el.parentElement.style.height=Math.max(300,sorted.length*28)+'px';
+  charts.dowDept=new Chart(el,{
+    type:'bar',
+    data:{
+      labels:sorted.map(([k])=>k),
+      datasets:[{
+        label:'신청 인원',
+        data:sorted.map(([,v])=>v),
+        backgroundColor:sorted.map((_,i)=>YUHAN_COLORS[i%YUHAN_COLORS.length]+'cc'),
+        borderColor:sorted.map((_,i)=>YUHAN_COLORS[i%YUHAN_COLORS.length]),
+        borderWidth:1.5,borderRadius:4
+      }]
+    },
+    options:{
+      indexAxis:'y',
+      responsive:true,maintainAspectRatio:false,
+      plugins:{
+        legend:{display:false},
+        tooltip:{callbacks:{label:ctx=>ctx.parsed.x+'명 ('+(total?(ctx.parsed.x/total*100).toFixed(1):0)+'%)'}}
+      },
+      scales:{
+        x:{beginAtZero:true,ticks:{stepSize:1},title:{display:true,text:'신청 인원'}},
+        y:{ticks:{font:{size:10}}}
+      }
+    }
+  });
 }
 
 function renderDowDeptTable(){
   const selVal=document.getElementById('dowDeptSelect')?.value||'';
   const dowFilter=selVal?parseInt(selVal):null;
-  // 학과별 요일별 집계
   const deptDow={};
   allData.forEach(r=>{
     const dow=getDow(r.date);
@@ -909,15 +981,47 @@ function renderDowDeptTable(){
     if(!deptDow[r.dept]) deptDow[r.dept]={1:0,2:0,3:0,4:0,5:0};
     deptDow[r.dept][dow]++;
   });
-  const sorted=Object.entries(deptDow).map(([dept,dows])=>({dept,dows,total:Object.values(dows).reduce((a,b)=>a+b,0)})).sort((a,b)=>b.total-a.total);
+  const sorted=Object.entries(deptDow)
+    .map(([dept,dows])=>({dept,dows,total:Object.values(dows).reduce((a,b)=>a+b,0)}))
+    .sort((a,b)=>b.total-a.total);
   const tbody=document.getElementById('dowDeptTableBody');
   if(!tbody) return;
-  if(!sorted.length){tbody.innerHTML='<tr><td colspan="8" style="text-align:center;color:var(--gray500);padding:14px">데이터 없음</td></tr>';return;}
+  if(!sorted.length){
+    tbody.innerHTML='<tr><td colspan="8" style="text-align:center;color:var(--gray500);padding:14px">데이터 없음</td></tr>';
+    destroyChart('chartDowDept'); return;
+  }
+  // 전체 테이블
   tbody.innerHTML=sorted.map((row,i)=>'<tr>'+
     '<td><b>'+(i+1)+'</b></td><td>'+esc(row.dept)+'</td>'+
     [1,2,3,4,5].map(d=>'<td style="text-align:center">'+(row.dows[d]||0)+'</td>').join('')+
     '<td style="text-align:center;font-weight:800;color:var(--primary)">'+row.total+'</td>'+
   '</tr>').join('');
+  // 상위 10개 가로 바 차트
+  const top10=sorted.slice(0,10);
+  const wrap=document.getElementById('chartDowDeptWrap');
+  if(wrap) wrap.style.height=Math.max(220,top10.length*30)+'px';
+  destroyChart('chartDowDept');
+  const el=document.getElementById('chartDowDept');
+  if(!el) return;
+  charts.dowDept=new Chart(el,{
+    type:'bar',
+    data:{
+      labels:top10.map(r=>r.dept),
+      datasets:[
+        {label:'월',data:top10.map(r=>r.dows[1]),backgroundColor:DAY_COLORS[1]+'99',borderColor:DAY_COLORS[1],borderWidth:1},
+        {label:'화',data:top10.map(r=>r.dows[2]),backgroundColor:DAY_COLORS[2]+'99',borderColor:DAY_COLORS[2],borderWidth:1},
+        {label:'수',data:top10.map(r=>r.dows[3]),backgroundColor:DAY_COLORS[3]+'99',borderColor:DAY_COLORS[3],borderWidth:1},
+        {label:'목',data:top10.map(r=>r.dows[4]),backgroundColor:DAY_COLORS[4]+'99',borderColor:DAY_COLORS[4],borderWidth:1},
+        {label:'금',data:top10.map(r=>r.dows[5]),backgroundColor:DAY_COLORS[5]+'99',borderColor:DAY_COLORS[5],borderWidth:1},
+      ]
+    },
+    options:{
+      indexAxis:'y',
+      responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{position:'bottom'}},
+      scales:{x:{beginAtZero:true,ticks:{stepSize:1},stacked:true},y:{stacked:true,ticks:{font:{size:10}}}}
+    }
+  });
 }
 
 function getDeptFiltered(){
@@ -945,16 +1049,50 @@ function renderDeptTab(){
   document.getElementById('deptTableBody').innerHTML=sorted.map(([dept,cnt],i)=>'<tr><td><b>'+(i+1)+'</b></td><td>'+esc(dept)+'</td><td><b>'+cnt+'명</b></td><td><span class="badge badge-blue">'+(total?(cnt/total*100).toFixed(1):0)+'%</span></td></tr>').join('');
 }
 
+function getGradeFiltered(){
+  const from=document.getElementById('gradeDateFrom')?.value;
+  const to=document.getElementById('gradeDateTo')?.value;
+  if(!from&&!to) return allData;
+  return allData.filter(r=>{
+    if(from&&r.date<from) return false;
+    if(to&&r.date>to) return false;
+    return true;
+  });
+}
+function clearGradeFilter(){
+  const f=document.getElementById('gradeDateFrom');const t=document.getElementById('gradeDateTo');
+  if(f)f.value='';if(t)t.value='';
+  renderGradeTab();
+}
 function renderGradeTab(){
-  const gm={'1학년':0,'2학년':0,'3학년':0};allData.forEach(r=>{if(gm[r.grade]!==undefined)gm[r.grade]++;});
-  const total=allData.length;
+  const filtered=getGradeFiltered();
+  const gm={'1학년':0,'2학년':0,'3학년':0};
+  filtered.forEach(r=>{if(gm[r.grade]!==undefined)gm[r.grade]++;});
+  const total=filtered.length;
   destroyChart('chartGrade');
-  charts.grade=safeChart('chartGrade',{type:'doughnut',data:{labels:Object.keys(gm),datasets:[{data:Object.values(gm),backgroundColor:YUHAN_COLORS.slice(0,3),borderWidth:2}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom'}}}});
-  const dates=[...new Set(allData.map(r=>r.date))].sort();const grades=['1학년','2학년','3학년'];
+  charts.grade=safeChart('chartGrade',{
+    type:'doughnut',
+    data:{labels:Object.keys(gm),datasets:[{data:Object.values(gm),backgroundColor:YUHAN_COLORS.slice(0,3),borderWidth:2}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom'}}}
+  });
+  const dates=[...new Set(filtered.map(r=>r.date))].sort();
+  const grades=['1학년','2학년','3학년'];
   destroyChart('chartGradeDaily');
-  charts.gradeDaily=safeChart('chartGradeDaily',{type:'line',data:{labels:dates.map(d=>d.slice(5)),datasets:grades.map((g,i)=>({label:g,data:dates.map(d=>allData.filter(r=>r.date===d&&r.grade===g).length),borderColor:YUHAN_COLORS[i],backgroundColor:YUHAN_COLORS[i]+'33',tension:.3,fill:true,pointRadius:3}))},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom'}},scales:{y:{beginAtZero:true,ticks:{stepSize:1}}}}});
+  charts.gradeDaily=safeChart('chartGradeDaily',{
+    type:'line',
+    data:{labels:dates.map(d=>d.slice(5)),datasets:grades.map((g,i)=>({
+      label:g,
+      data:dates.map(d=>filtered.filter(r=>r.date===d&&r.grade===g).length),
+      borderColor:YUHAN_COLORS[i],backgroundColor:YUHAN_COLORS[i]+'33',
+      tension:.3,fill:true,pointRadius:3
+    }))},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom'}},scales:{y:{beginAtZero:true,ticks:{stepSize:1}}}}
+  });
   document.getElementById('gradeTableBody').innerHTML=Object.entries(gm).map(([grade,cnt])=>{
-    const topDept=Object.entries(allData.filter(r=>r.grade===grade).reduce((acc,r)=>{acc[r.dept]=(acc[r.dept]||0)+1;return acc;},{})).sort((a,b)=>b[1]-a[1])[0];
+    const topDept=Object.entries(
+      filtered.filter(r=>r.grade===grade)
+        .reduce((acc,r)=>{acc[r.dept]=(acc[r.dept]||0)+1;return acc;},{})
+    ).sort((a,b)=>b[1]-a[1])[0];
     return '<tr><td><b>'+esc(grade)+'</b></td><td>'+cnt+'명</td><td><span class="badge badge-green">'+(total?((cnt/total)*100).toFixed(1):0)+'%</span></td><td>'+esc(topDept?topDept[0]:'-')+'</td></tr>';
   }).join('');
 }
@@ -963,19 +1101,64 @@ function renderGradeTab(){
 function renderTimeTab(){
   const df=document.getElementById('timeFilterDate').value;
   const filtered=df?allData.filter(r=>r.date===df):allData;
-  const slots=[];for(let h=8;h<=10;h++)for(let m=0;m<60;m+=5)slots.push(String(h).padStart(2,'0')+':'+String(m).padStart(2,'0'));
+  // 8:00~13:00 5분 단위 슬롯
+  const slots=[];
+  for(let h=8;h<=12;h++) for(let m=0;m<60;m+=5) slots.push(String(h).padStart(2,'0')+':'+String(m).padStart(2,'0'));
+  slots.push('13:00');
   const countMap={};slots.forEach(s=>countMap[s]=0);
   filtered.forEach(r=>{
-    if(!r.applyTime)return;
-    const[h,m]=r.applyTime.split(':').map(Number);
+    if(!r.applyTime) return;
+    const parts=r.applyTime.split(':').map(Number);
+    const h=parts[0]; const m=parts[1]||0;
+    if(h<8||h>13||(h===13&&m>0)) return;
     const key=String(h).padStart(2,'0')+':'+String(Math.floor(m/5)*5).padStart(2,'0');
-    if(countMap[key]!==undefined)countMap[key]++;
+    if(key in countMap) countMap[key]++;
   });
-  const active=slots.filter(s=>countMap[s]>0);const labels=active.length>0?active:slots.slice(1,13);
   destroyChart('chartTime');
-  charts.time=safeChart('chartTime',{type:'bar',data:{labels,datasets:[{label:'신청',data:labels.map(s=>countMap[s]||0),backgroundColor:YUHAN_COLORS[1]+'cc',borderColor:YUHAN_COLORS[1],borderWidth:1.5,borderRadius:4}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,ticks:{stepSize:1}},x:{ticks:{font:{size:10},maxRotation:45}}}}});
+  charts.time=safeChart('chartTime',{
+    type:'line',
+    data:{
+      labels:slots,
+      datasets:[{
+        label:'신청 인원',
+        data:slots.map(s=>countMap[s]||0),
+        borderColor:YUHAN_COLORS[0],
+        backgroundColor:YUHAN_COLORS[0]+'22',
+        borderWidth:2,
+        pointRadius:4,
+        pointBackgroundColor:slots.map(s=>{
+          const h=parseInt(s);
+          if(h<9) return YUHAN_COLORS[0];
+          if(h<10) return YUHAN_COLORS[2];
+          if(h<11) return YUHAN_COLORS[1];
+          return YUHAN_COLORS[5];
+        }),
+        pointHoverRadius:7,
+        fill:true,
+        tension:0.3
+      }]
+    },
+    options:{
+      responsive:true,maintainAspectRatio:false,
+      plugins:{
+        legend:{display:false},
+        tooltip:{callbacks:{title:ctx=>'⏰ '+ctx[0].label,label:ctx=>'신청: '+ctx.parsed.y+'명'}}
+      },
+      scales:{
+        y:{beginAtZero:true,ticks:{stepSize:1},title:{display:true,text:'신청 인원'}},
+        x:{ticks:{font:{size:9},maxRotation:60},title:{display:true,text:'신청 시간'}}
+      }
+    }
+  });
   let cumul=0;
-  document.getElementById('timeTableBody').innerHTML=labels.map(s=>{const cnt=countMap[s]||0;cumul+=cnt;return cnt>0?'<tr><td>'+s+'</td><td><b>'+cnt+'명</b></td><td>'+cumul+'명</td></tr>':''}).join('')||'<tr><td colspan="3" style="text-align:center;color:var(--gray500)">데이터 없음</td></tr>';
+  const rows=slots.map(s=>{
+    const cnt=countMap[s]||0; cumul+=cnt;
+    if(cnt===0) return '';
+    const h=parseInt(s);
+    const color=h<9?'var(--primary)':h<10?'var(--green)':h<11?'var(--orange)':'var(--red)';
+    return '<tr><td><b style="color:'+color+'">'+s+'</b></td><td><b>'+cnt+'명</b></td><td>'+cumul+'명</td></tr>';
+  }).filter(Boolean).join('');
+  document.getElementById('timeTableBody').innerHTML=rows||'<tr><td colspan="3" style="text-align:center;color:var(--gray500);padding:14px">데이터 없음</td></tr>';
 }
 
 // ── 신청 목록 ── allData 사용
@@ -1431,20 +1614,22 @@ function generateSampleData(){
 
 // ── 자동 갱신 (60초) ──
 function startAutoRefresh(){
-  if(liveRefreshTimer)clearInterval(liveRefreshTimer);
-  liveRefreshTimer=setInterval(()=>{
+  if(liveRefreshTimer) clearInterval(liveRefreshTimer);
+  liveRefreshTimer = setInterval(()=>{
     if(!IS_DEMO){
-      fetchFromGAS({action:'getAll'},function(data,err){
-        if(!err&&Array.isArray(data)){
-          allData=data;
+      fetchFromGAS({action:'getAll'}, function(data, err){
+        if(!err && Array.isArray(data)){
+          allData = data;
           setGasStatus(true);
         } else {
-          setGasStatus(false); // 자동갱신 실패 시 상태 업데이트
+          setGasStatus(false);
         }
-        renderLive();renderLiveList();renderAllDatesTable();renderKPI();
+        // 실시간 탭은 항상 갱신
+        renderLive(); renderLiveList(); renderAllDatesTable(); renderKPI();
+        // 나머지 탭은 탭 전환 시 최신 데이터로 렌더됨 (switchTab 참조)
       });
     }
-  },60000);
+  }, 60000);
 }
 
 document.addEventListener('DOMContentLoaded',function(){loadAll();startAutoRefresh();});
