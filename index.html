@@ -174,6 +174,12 @@ input:checked+.toggle-slider:before{transform:translateX(20px)}
 .status-ok{background:#dcfce7;color:#166534}
 .status-err{background:#fee2e2;color:#991b1b}
 .status-load{background:#fef3c7;color:#92400e}
+/* 승인 모드 */
+.approval-mode-banner{background:linear-gradient(135deg,#7c3aed,#6d28d9);color:#fff;border-radius:9px;padding:10px 14px;margin-bottom:10px;display:flex;align-items:center;gap:8px;font-size:12px;font-weight:700;}
+.approval-mode-banner .ab-count{background:rgba(255,255,255,.25);border-radius:20px;padding:2px 10px;font-size:13px;font-weight:800;}
+.approval-cb{width:20px;height:20px;cursor:pointer;accent-color:#7c3aed;}
+tr.approved-row td{background:#f5f3ff!important;}
+tr.waiting-row td{opacity:.6;}
 /* 인쇄 */
 @media print{
   .admin-header,.tab-bar,.sign-controls,.hbtn,.loading-bar{display:none!important}
@@ -210,7 +216,8 @@ input:checked+.toggle-slider:before{transform:translateX(20px)}
   <div class="tab-item" onclick="switchTab('time')">⏰ 시간대</div>
   <div class="tab-item" onclick="switchTab('sign')">📝 서명부</div>
   <div class="tab-item" onclick="switchTab('checklist')">📋 점검표</div>
-  <div class="tab-item" onclick="switchTab('list')">🗒️ 목록</div>
+  <div class="tab-item" onclick="switchTab('student')">👤 학생별</div>
+    <div class="tab-item" onclick="switchTab('list')">🗒️ 목록</div>
   <div class="tab-item" onclick="switchTab('settings')">⚙️ 설정</div>
 </div>
 
@@ -242,13 +249,17 @@ input:checked+.toggle-slider:before{transform:translateX(20px)}
     <button onclick="toggleSoldOut()" id="soldOutResumeBtn" style="display:none;padding:8px 16px;border:none;border-radius:8px;font-size:12px;font-weight:700;font-family:inherit;cursor:pointer;background:var(--green);color:#fff">▶ 판매 재개</button>
     <span style="font-size:11px;color:var(--gray500)">잔여 0 또는 수동 종료 시 학생화면에 종료 문구가 표시됩니다</span>
   </div>
+  <div id="approvalBanner" style="display:none" class="approval-mode-banner">
+    <span>✋ 현장 승인 모드 — 실제로 온 학생만 체크하세요</span>
+    <span class="ab-count">승인 <span id="approvedCount">0</span>명 / 대기 <span id="waitingCount">0</span>명</span>
+  </div>
   <div class="table-panel" style="margin-top:4px">
     <div class="table-panel-header">
       <h3>🕐 실시간 신청 현황</h3>
       <span id="liveListCount" style="font-size:11px;color:var(--gray500)"></span>
     </div>
     <div style="overflow-x:auto"><table>
-      <thead><tr><th>#</th><th>학과</th><th>학번</th><th>성명</th><th>신청시간</th><th>결제</th></tr></thead>
+      <thead><tr><th>#</th><th>학과</th><th>학번</th><th>성명</th><th>신청시간</th><th>결제</th><th id="approvalTh" style="display:none;color:#7c3aed;font-weight:800;">✋현장확인</th></tr></thead>
       <tbody id="liveListBody"></tbody>
     </table></div>
   </div>
@@ -293,10 +304,16 @@ input:checked+.toggle-slider:before{transform:translateX(20px)}
 <!-- ③ 요일별 -->
 <div class="tab-content" id="tab-dow">
   <div class="dow-grid" id="dowCards"></div>
-  <!-- 요일별 학과 현황: 상위 10개 가로 바 그래프 + 전체 테이블 -->
-  <div class="chart-panel" style="margin-bottom:14px">
-    <h3>🏫 요일별 학과 신청 상위 10개</h3>
-    <div style="display:flex;gap:7px;margin-bottom:9px;flex-wrap:wrap">
+  <div class="chart-grid">
+    <div class="chart-panel" style="grid-column:1/-1"><h3>📅 요일별 신청 인원</h3><div class="chart-wrap" style="height:230px"><canvas id="chartDow"></canvas></div></div>
+  </div>
+  <div class="table-panel">
+    <div class="table-panel-header"><h3>요일별 상세</h3></div>
+    <table><thead><tr><th>요일</th><th>총 신청</th><th>운영일수</th><th>일 평균</th><th>최다 신청일</th></tr></thead><tbody id="dowTableBody"></tbody></table>
+  </div>
+  <div class="table-panel" style="margin-top:12px">
+    <div class="table-panel-header">
+      <h3>🏫 요일별 학과 신청 현황</h3>
       <select id="dowDeptSelect" onchange="renderDowDeptTable()" style="padding:4px 8px;border:1.5px solid var(--gray200);border-radius:6px;font-size:11px;font-family:inherit;background:#fff">
         <option value="">전체 요일</option>
         <option value="1">월요일</option>
@@ -306,10 +323,6 @@ input:checked+.toggle-slider:before{transform:translateX(20px)}
         <option value="5">금요일</option>
       </select>
     </div>
-    <div id="chartDowDeptWrap" style="position:relative;height:280px"><canvas id="chartDowDept"></canvas></div>
-  </div>
-  <div class="table-panel">
-    <div class="table-panel-header"><h3>🏫 요일별 학과 신청 현황 (전체)</h3></div>
     <div style="overflow-x:auto"><table>
       <thead><tr><th>순위</th><th>학과</th><th>월</th><th>화</th><th>수</th><th>목</th><th>금</th><th>합계</th></tr></thead>
       <tbody id="dowDeptTableBody"></tbody>
@@ -338,14 +351,6 @@ input:checked+.toggle-slider:before{transform:translateX(20px)}
 
 <!-- ⑤ 학년별 -->
 <div class="tab-content" id="tab-grade">
-  <div class="date-filter">
-    <label>기간 필터</label>
-    <input type="date" id="gradeDateFrom">
-    <span style="font-size:11px;color:var(--gray500)">~</span>
-    <input type="date" id="gradeDateTo">
-    <button class="filter-btn" onclick="renderGradeTab()">조회</button>
-    <button class="filter-btn" style="background:var(--gray500)" onclick="clearGradeFilter()">전체</button>
-  </div>
   <div class="chart-grid">
     <div class="chart-panel"><h3>📚 학년별</h3><div class="chart-wrap"><canvas id="chartGrade"></canvas></div></div>
     <div class="chart-panel"><h3>📈 학년별 추이</h3><div class="chart-wrap"><canvas id="chartGradeDaily"></canvas></div></div>
@@ -361,9 +366,8 @@ input:checked+.toggle-slider:before{transform:translateX(20px)}
   <div class="date-filter">
     <label>날짜</label><input type="date" id="timeFilterDate">
     <button class="filter-btn" onclick="renderTimeTab()">조회</button>
-    <button class="filter-btn" style="background:var(--gray500)" onclick="document.getElementById('timeFilterDate').value='';renderTimeTab()">전체</button>
   </div>
-  <div class="chart-panel" style="margin-bottom:12px"><h3>⏰ 5분 단위 신청 분포 (08:00~13:00)</h3><div style="position:relative;height:260px"><canvas id="chartTime"></canvas></div></div>
+  <div class="chart-panel" style="margin-bottom:12px"><h3>⏰ 5분 단위 신청 분포</h3><div style="position:relative;height:240px"><canvas id="chartTime"></canvas></div></div>
   <div class="table-panel">
     <div class="table-panel-header"><h3>시간대별 상세</h3></div>
     <table><thead><tr><th>시간대</th><th>신청 인원</th><th>누적</th></tr></thead><tbody id="timeTableBody"></tbody></table>
@@ -406,6 +410,33 @@ input:checked+.toggle-slider:before{transform:translateX(20px)}
       </table>
     </div>
     <p style="font-size:10px;color:var(--gray500);margin-top:10px">※ 학교 집계/정산 일정상의 이유로 식수인원 확인이 5일까지 불가능한 경우 업로드 예정일을 작성하여 주시기 바랍니다.</p>
+  </div>
+</div>
+
+<!-- ⑨-1 학생별 -->
+<div class="tab-content" id="tab-student">
+  <div class="date-filter" style="flex-wrap:wrap;gap:8px">
+    <label>기간</label>
+    <input type="date" id="studentDateFrom">
+    <span style="font-size:11px;color:var(--gray500)">~</span>
+    <input type="date" id="studentDateTo">
+    <button class="filter-btn" onclick="renderStudentTab()">조회</button>
+    <button class="filter-btn" style="background:var(--gray500)" onclick="clearStudentFilter()">전체</button>
+    <input type="text" id="studentSearch" class="search-input" placeholder="학번·성명·학과 검색" oninput="renderStudentTab()" style="width:160px">
+  </div>
+  <div class="chart-panel" style="margin-bottom:14px">
+    <h3>👤 학생별 신청 현황 (상위 30명)</h3>
+    <div style="position:relative;height:320px"><canvas id="chartStudent"></canvas></div>
+  </div>
+  <div class="table-panel">
+    <div class="table-panel-header">
+      <h3>📋 학생별 상세</h3>
+      <span id="studentTotal" style="font-size:11px;color:var(--gray500)"></span>
+    </div>
+    <div style="overflow-x:auto"><table>
+      <thead><tr><th>순위</th><th>학번</th><th>성명</th><th>학과</th><th>학년</th><th>신청횟수</th><th>최근신청일</th><th>주결제</th></tr></thead>
+      <tbody id="studentTableBody"></tbody>
+    </table></div>
   </div>
 </div>
 
@@ -453,6 +484,24 @@ input:checked+.toggle-slider:before{transform:translateX(20px)}
     <div class="setting-row"><span class="setting-label">이체 금액</span><input class="setting-input" id="setBankAmt" value="1,000원"></div>
     <button class="save-btn" onclick="saveAccountSettings()">💾 저장</button>
     <div id="acctSaveMsg" style="font-size:11px;color:var(--green);margin-top:7px;display:none">✅ 저장되었습니다.</div>
+  </div>
+  <div class="settings-section">
+    <h3>🏫 학과 목록 관리</h3>
+    <p style="font-size:11px;color:var(--gray500);margin-bottom:10px">
+      학과를 추가하거나 이름을 변경할 수 있습니다. 저장하면 데모 샘플 데이터에 반영됩니다.
+    </p>
+    <div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap">
+      <input type="text" id="newDeptInput" placeholder="새 학과명 입력"
+        style="flex:1;min-width:150px;padding:7px 10px;border:1.5px solid var(--gray200);border-radius:7px;font-size:12px;font-family:inherit"
+        onkeydown="if(event.key==='Enter')addDeptItem()">
+      <button class="save-btn" style="padding:7px 14px" onclick="addDeptItem()">+ 추가</button>
+    </div>
+    <div id="deptListWrap" style="max-height:320px;overflow-y:auto;border:1.5px solid var(--gray200);border-radius:8px;padding:6px"></div>
+    <div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap">
+      <button class="save-btn" onclick="saveDeptList()">💾 학과 목록 저장</button>
+      <button class="save-btn" style="background:var(--gray500)" onclick="resetDeptList()">↺ 기본값으로 초기화</button>
+    </div>
+    <div id="deptSaveMsg" style="font-size:11px;color:var(--green);margin-top:7px;display:none">✅ 저장되었습니다.</div>
   </div>
   <div class="settings-section">
     <h3>🍽️ 식단 관리</h3>
@@ -545,6 +594,7 @@ const LS = {
 //  전역 상태 — 데이터는 여기서 단일 관리
 // ══════════════════════════════════════════════════════
 let allData   = [];   // GAS에서 받은 신청 데이터
+let approvedSet = new Set(JSON.parse(localStorage.getItem('yuhan_approved')||'[]'));
 let MENU_DATA = {};   // GAS 식단 시트 (또는 localStorage fallback)
 let charts    = {};
 let selectedLiveDate = '';
@@ -588,23 +638,22 @@ function getDefaultMenuData() {
 //  GAS JSONP
 // ══════════════════════════════════════════════════════
 function fetchFromGAS(params, callback) {
-  const qParts = Object.entries(params)
-    .map(([k,v]) => encodeURIComponent(k)+'='+encodeURIComponent(v))
-    .join('&');
-  const timeoutMs = (params.action === 'getAll') ? 25000 : 15000;
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  fetch(GAS_URL + '?' + qParts, {
-    method: 'GET',
-    mode: 'cors',
-    signal: controller.signal
-  })
-  .then(r => { clearTimeout(timer); if(!r.ok) throw new Error(r.status); return r.json(); })
-  .then(data => callback(data, null))
-  .catch(err => {
-    clearTimeout(timer);
-    callback(null, err.name==='AbortError' ? 'timeout' : 'error');
-  });
+  const cbName = 'cb_'+Date.now()+'_'+Math.random().toString(36).slice(2);
+  const script = document.createElement('script');
+  const timeout = setTimeout(()=>{
+    delete window[cbName];
+    if(document.body.contains(script)) document.body.removeChild(script);
+    callback(null, 'timeout');
+  }, 25000);  // GAS 콜드스타트 대비 25초
+  window[cbName] = function(data){
+    clearTimeout(timeout);
+    delete window[cbName];
+    if(document.body.contains(script)) document.body.removeChild(script);
+    callback(data, null);
+  };
+  const qParts=Object.entries({...params,callback:cbName}).map(([k,v])=>encodeURIComponent(k)+'='+encodeURIComponent(v)).join('&');
+  script.src = GAS_URL+'?'+qParts;
+  document.body.appendChild(script);
 }
 
 // ── 로딩 바 ──
@@ -644,36 +693,27 @@ function loadAll() {
     return;
   }
 
-  // ★ getMenu + getAll 병렬 실행 → 로드 시간 단축
-  let menuDone = false, allDone = false;
-
-  function onBothDone() {
-    if (!menuDone || !allDone) return;
-    renderAll();
-    loadingDone();
-  }
-
-  fetchFromGAS({action:'getMenu'}, function(menuRes, menuErr) {
+  // GAS에서 식단 먼저, 그 다음 신청 데이터 로드 (순차)
+  fetchFromGAS({action:'getMenu'}, function(menuRes, menuErr){
     if (!menuErr && menuRes && menuRes.status==='ok' && menuRes.data && Object.keys(menuRes.data).length > 0) {
       MENU_DATA = menuRes.data;
-      LS.set('menu', MENU_DATA);
+      LS.set('menu', MENU_DATA); // 캐시 저장
     } else {
+      // GAS 식단 없으면 localStorage → 기본값 순으로 fallback
       MENU_DATA = LS.get('menu', getDefaultMenuData());
     }
-    menuDone = true;
-    onBothDone();
-  });
 
-  fetchFromGAS({action:'getAll'}, function(data, err) {
-    if (!err && Array.isArray(data)) {
-      allData = data;
-      setGasStatus(true);
-    } else {
-      allData = [];
-      setGasStatus(false);
-    }
-    allDone = true;
-    onBothDone();
+    fetchFromGAS({action:'getAll'}, function(data, err){
+      if (!err && Array.isArray(data)) {
+        allData = data;
+        setGasStatus(true);
+      } else {
+        allData = [];
+        setGasStatus(false);
+      }
+      renderAll();
+      loadingDone();
+    });
   });
 }
 
@@ -681,22 +721,10 @@ function loadAll() {
 //  탭 전환
 // ══════════════════════════════════════════════════════
 function switchTab(id){
-  const ids=['live','oper','overview','dow','dept','grade','time','sign','checklist','list','settings'];
+  const ids=['live','oper','overview','dow','dept','grade','time','sign','checklist','student','list','settings'];
   document.querySelectorAll('.tab-item').forEach((el,i)=>el.classList.toggle('active',ids[i]===id));
   document.querySelectorAll('.tab-content').forEach(el=>el.classList.remove('active'));
   document.getElementById('tab-'+id).classList.add('active');
-  // 탭 전환 시 최신 allData로 해당 탭 렌더
-  if(allData.length > 0){
-    if(id==='overview') { renderKPI(); renderOverviewCharts(); }
-    else if(id==='dow')  renderDowTab();
-    else if(id==='dept') renderDeptTab();
-    else if(id==='grade') renderGradeTab();
-    else if(id==='time') renderTimeTab();
-    else if(id==='list') renderListTab();
-    else if(id==='checklist') renderChecklist();
-    else if(id==='sign') buildSignDateSelect();
-    else if(id==='oper') renderAllDatesTable();
-  }
 }
 
 // ── 날짜 유틸 ──
@@ -722,6 +750,7 @@ function renderAll(){
   document.getElementById('timeFilterDate').value=today;
   document.getElementById('listFilterDate').value=today;
   renderTimeTab();
+  renderStudentTab();
   renderListTab();
   buildSignDateSelect();
   renderChecklist();
@@ -733,11 +762,11 @@ function renderAll(){
 //  실시간 현황
 // ══════════════════════════════════════════════════════
 function isSoldOutState(date){
-  const so=LS.get('soldout_settings',{manual:false});
+  var so=LS.get('soldout_settings',{manual:false});
   if(so.manual) return true;
-  const info=MENU_DATA[date]; if(!info) return false;
-  const sold=allData.filter(r=>r.date===date).length;
-  return sold >= info.qty;
+  var info=MENU_DATA[date]; if(!info) return false;
+  var sold=getEffectiveSold(date);
+  return sold>=info.qty;
 }
 
 function buildLiveDateTabs(){
@@ -762,39 +791,91 @@ function selectLiveDate(date,btn){
   renderLiveList();
 }
 
+// ── 현장 승인 ──
+function approvalKey(date,sid){ return date+'_'+sid; }
+function getApprovedData(){
+  // 날짜별로: 해당 날짜에 승인 데이터가 1건이라도 있으면 승인된 것만
+  //           승인 데이터가 없는 날짜는 전체 신청 포함
+  // → 체크 안 한 날은 기존 신청 데이터 유지, 체크한 날은 체크된 것만
+  const approvedDates = new Set(
+    Array.from(approvedSet).map(function(k){ return k.split('_')[0]; })
+  );
+  return allData.filter(function(r){
+    if(approvedDates.has(r.date)){
+      // 이 날짜는 승인 체크가 있음 → 승인된 것만
+      return approvedSet.has(approvalKey(r.date, r.studentId));
+    }
+    // 이 날짜는 승인 체크 없음 → 전체 포함
+    return true;
+  });
+}
+function saveApproved(){ try{localStorage.setItem('yuhan_approved',JSON.stringify([...approvedSet]));}catch(e){} }
+function toggleApproval(date,sid){
+  var k=approvalKey(date,sid);
+  if(approvedSet.has(k)) approvedSet.delete(k); else approvedSet.add(k);
+  saveApproved(); renderLive(); renderLiveList();
+}
+function isApprovalMode(date){
+  var info=MENU_DATA[date]; if(!info) return false;
+  var allSold=allData.filter(function(r){return r.date===date;}).length;
+  return allSold>0 && Math.max(0,info.qty-allSold)<=20;
+}
+function getEffectiveSold(date){
+  var info=MENU_DATA[date];
+  var allSold=allData.filter(function(r){return r.date===date;}).length;
+  if(info && allSold>0 && Math.max(0,info.qty-allSold)<=20){
+    return Array.from(approvedSet).filter(function(k){return k.indexOf(date+'_')===0;}).length;
+  }
+  return allSold;
+}
 function renderLive(){
-  const date=selectedLiveDate;
-  const info=MENU_DATA[date];
+  var date=selectedLiveDate;
+  var info=MENU_DATA[date];
   if(!info){
-    ['liveTotal','liveSold','liveRemain'].forEach(id=>document.getElementById(id).textContent='—');
+    ['liveTotal','liveSold','liveRemain'].forEach(function(id){document.getElementById(id).textContent='—';});
     document.getElementById('livePct').textContent='—%';
     document.getElementById('liveBar').style.width='0%';
     document.getElementById('soldOutBannerWrap').innerHTML='';
     return;
   }
-  const total=info.qty;
-  const sold=allData.filter(r=>r.date===date).length;
-  const remain=Math.max(0,total-sold);
-  const pct=total>0?Math.round(sold/total*100):0;
-  const isLow=remain<=20&&remain>0;
-  const isSO=isSoldOutState(date);
+  var total=info.qty;
+  var allSold=allData.filter(function(r){return r.date===date;}).length;
+  var apMode=isApprovalMode(date);
+  var sold=apMode?getEffectiveSold(date):allSold;
+  var remain=Math.max(0,total-sold);
+  var pct=total>0?Math.round(sold/total*100):0;
+  var isLow=remain<=20&&remain>0;
+  var isSO=isSoldOutState(date);
   document.getElementById('liveTotal').textContent=total;
-  document.getElementById('liveSold').textContent=sold;
+  document.getElementById('liveSold').textContent=sold+(apMode?' (승인)':'');
   document.getElementById('liveRemain').textContent=remain;
   document.getElementById('livePct').textContent=pct+'%';
   document.getElementById('liveBar').style.width=pct+'%';
   document.getElementById('liveBar').style.background=isSO?'var(--red)':isLow?'var(--orange)':'var(--green)';
   document.getElementById('liveRemain').className='lsv lsv-remain'+(isLow||isSO?' low':'');
-  const now=new Date();
+  var now=new Date();
   document.getElementById('liveUpdatedAt').textContent='최종 갱신: '+String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0')+':'+String(now.getSeconds()).padStart(2,'0');
+  // 승인 배너
+  var apBanner=document.getElementById('approvalBanner');
+  var apTh=document.getElementById('approvalTh');
+  if(apMode){
+    var apCnt=Array.from(approvedSet).filter(function(k){return k.indexOf(date+'_')===0;}).length;
+    if(apBanner){apBanner.style.display='flex';
+      var ac=document.getElementById('approvedCount'); if(ac) ac.textContent=apCnt;
+      var wc=document.getElementById('waitingCount');  if(wc) wc.textContent=allSold-apCnt;
+    }
+    if(apTh) apTh.style.display='';
+  } else {
+    if(apBanner) apBanner.style.display='none';
+    if(apTh) apTh.style.display='none';
+  }
   // 종료 배너
-  const so=LS.get('soldout_settings',{manual:false,msg:'금일 천원의 아침밥 판매가 종료되었습니다. 감사합니다.'});
-  const banner=document.getElementById('soldOutBannerWrap');
+  var so=LS.get('soldout_settings',{manual:false,msg:'금일 천원의 아침밥 판매가 종료되었습니다. 감사합니다.'});
+  var banner=document.getElementById('soldOutBannerWrap');
   if(isSO && date===fDate(new Date())){
     banner.innerHTML='<div class="sold-out-banner"><h2>⛔ 판매 종료</h2><p>'+esc(so.msg)+'</p></div>';
   } else { banner.innerHTML=''; }
-  // 수동 종료 버튼
-  const manualOn=so.manual;
+  var manualOn=so.manual;
   document.getElementById('soldOutToggleBtn').style.display=manualOn?'none':'inline-flex';
   document.getElementById('soldOutResumeBtn').style.display=manualOn?'inline-flex':'none';
 }
@@ -802,20 +883,46 @@ function renderLive(){
 
 // ── 실시간 신청 현황 (선택 날짜 기준 최신 신청자) ──
 function renderLiveList(){
-  const date=selectedLiveDate;
-  const tbody=document.getElementById('liveListBody');
-  const countEl=document.getElementById('liveListCount');
+  var date=selectedLiveDate;
+  var tbody=document.getElementById('liveListBody');
+  var countEl=document.getElementById('liveListCount');
   if(!tbody) return;
-  const dayData=allData.filter(r=>r.date===date).sort((a,b)=>b.applyTime>a.applyTime?1:-1);
+  var dayData=allData.filter(function(r){return r.date===date;}).sort(function(a,b){return a.applyTime>b.applyTime?1:-1;});
   if(countEl) countEl.textContent='총 '+dayData.length+'명';
   if(!dayData.length){
-    tbody.innerHTML='<tr><td colspan="6" style="text-align:center;color:var(--gray500);padding:14px">신청 데이터 없음</td></tr>';
+    tbody.innerHTML='<tr><td colspan="7" style="text-align:center;color:var(--gray500);padding:14px">신청 데이터 없음</td></tr>';
     return;
   }
-  tbody.innerHTML=dayData.map((r,i)=>{
-    const payBadge=r.payMethod==='계좌이체'?'<span class="badge badge-blue">이체</span>':'<span class="badge badge-amber">현금</span>';
-    return '<tr><td>'+(i+1)+'</td><td>'+esc(r.dept)+'</td><td>'+esc(r.studentId)+'</td><td>'+esc(r.name)+'</td><td>'+esc(r.applyTime)+'</td><td>'+payBadge+'</td></tr>';
+  var apMode=isApprovalMode(date);
+  tbody.innerHTML=dayData.map(function(r,i){
+    var key=approvalKey(date,r.studentId);
+    var isAp=approvedSet.has(key);
+    var payBadge=r.payMethod==='계좌이체'?'<span class="badge badge-blue">이체</span>':'<span class="badge badge-amber">현금</span>';
+    var rowCls=apMode?(isAp?'approved-row':'waiting-row'):'';
+    var cbCell='';
+    if(apMode){
+      cbCell='<td style="text-align:center">'
+        +'<input type="checkbox" class="approval-cb"'
+        +' data-date="'+esc(date)+'" data-sid="'+esc(r.studentId)+'"'
+        +(isAp?' checked':'')
+        +' title="'+(isAp?'승인됨(클릭=취소)':'미확인(클릭=승인)')+'"></td>';
+    }
+    return '<tr class="'+rowCls+'">'
+      +'<td>'+(i+1)+'</td>'
+      +'<td>'+esc(r.dept)+'</td>'
+      +'<td>'+esc(r.studentId)+'</td>'
+      +'<td><b>'+esc(r.name)+'</b></td>'
+      +'<td>'+esc(r.applyTime)+'</td>'
+      +'<td>'+payBadge+'</td>'
+      +cbCell
+      +'</tr>';
   }).join('');
+  // 이벤트 위임으로 체크박스 클릭 처리 (onchange 속성 대신)
+  tbody.querySelectorAll('.approval-cb').forEach(function(cb){
+    cb.addEventListener('change', function(){
+      toggleApproval(this.dataset.date, this.dataset.sid);
+    });
+  });
 }
 function renderAllDatesTable(){
   const tbody=document.getElementById('liveAllDates');
@@ -824,7 +931,7 @@ function renderAllDatesTable(){
   tbody.innerHTML=operDates.map(date=>{
     const info=MENU_DATA[date];
     const total=info.qty;
-    const sold=allData.filter(r=>r.date===date).length;
+    const sold=getApprovedData().filter(r=>r.date===date).length;
     const remain=Math.max(0,total-sold);
     const pct=total>0?Math.round(sold/total*100):0;
     const isSO=isSoldOutState(date);
@@ -860,7 +967,7 @@ function renderKPI(){
   const filtered=getOverviewFiltered();
   const total=filtered.length;
   const today=fDate(new Date());
-  const todayCount=allData.filter(r=>r.date===today).length;
+  const todayCount=getApprovedData().filter(r=>r.date===today).length;
   const dates=[...new Set(filtered.map(r=>r.date))].length;
   const transfer=filtered.filter(r=>r.payMethod==='계좌이체').length;
   const cash=filtered.filter(r=>r.payMethod==='현금지급').length;
@@ -875,8 +982,9 @@ function renderKPI(){
 function getOverviewFiltered(){
   const from=document.getElementById('overviewDateFrom')?.value;
   const to=document.getElementById('overviewDateTo')?.value;
-  if(!from&&!to) return allData;
-  return allData.filter(r=>{
+  const base=getApprovedData();
+  if(!from&&!to) return base;
+  return base.filter(r=>{
     if(from&&r.date<from) return false;
     if(to&&r.date>to) return false;
     return true;
@@ -911,129 +1019,67 @@ function renderOverviewCharts(){
 }
 
 function renderDowTab(){
-  const dowMap={1:[],2:[],3:[],4:[],5:[]};
-  const dateMap={};allData.forEach(r=>{dateMap[r.date]=(dateMap[r.date]||0)+1;});
+  const _apData=getApprovedData(); const dowMap={1:[],2:[],3:[],4:[],5:[]};
+  const dateMap={};_apData.forEach(r=>{dateMap[r.date]=(dateMap[r.date]||0)+1;});
   Object.entries(dateMap).forEach(([date,cnt])=>{const dow=getDow(date);if(dow>=1&&dow<=5)dowMap[dow].push(cnt);});
+  const rows=[];
   document.getElementById('dowCards').innerHTML=[1,2,3,4,5].map(d=>{
     const vals=dowMap[d];const total=vals.reduce((a,b)=>a+b,0);const avg=vals.length?(total/vals.length).toFixed(1):'0';
+    rows.push({dow:d,name:DAY_NAMES[d],total,cnt:vals.length,avg,maxDate:Object.entries(dateMap).filter(([dt])=>getDow(dt)===d).sort((a,b)=>b[1]-a[1])[0]?.[0]||'-'});
     return '<div class="dow-card" style="border-top-color:'+DAY_COLORS[d]+'"><div class="dow-name">'+DAY_NAMES[d]+'요일</div><div class="dow-val" style="color:'+DAY_COLORS[d]+'">'+total+'</div><div class="dow-avg">평균 '+avg+'명 / '+vals.length+'회</div></div>';
   }).join('');
+  destroyChart('chartDow');
+  charts.dow=safeChart('chartDow',{type:'bar',data:{labels:[1,2,3,4,5].map(d=>DAY_NAMES[d]+'요일'),datasets:[{label:'총 신청',data:[1,2,3,4,5].map(d=>dowMap[d].reduce((a,b)=>a+b,0)),backgroundColor:[1,2,3,4,5].map(d=>DAY_COLORS[d]+'cc'),borderColor:[1,2,3,4,5].map(d=>DAY_COLORS[d]),borderWidth:1.5,borderRadius:6},{label:'일 평균',data:[1,2,3,4,5].map(d=>{const v=dowMap[d];return v.length?parseFloat((v.reduce((a,b)=>a+b,0)/v.length).toFixed(1)):0;}),backgroundColor:'transparent',borderColor:'#374151',borderWidth:2,type:'line',tension:.4,pointRadius:5}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom'}},scales:{y:{beginAtZero:true}}}});
+  document.getElementById('dowTableBody').innerHTML=rows.map(r=>'<tr><td><b style="color:'+DAY_COLORS[r.dow]+'">'+esc(r.name)+'요일</b></td><td><b>'+r.total+'명</b></td><td>'+r.cnt+'회</td><td><b>'+r.avg+'명</b></td><td>'+esc(r.maxDate)+'</td></tr>').join('');
   renderDowDeptTable();
-}
-
-function renderDowDeptChart(){
-  const selVal=document.getElementById('dowDeptSelect')?.value||'';
-  const dowFilter=selVal?parseInt(selVal):null;
-  // 학과별 집계
-  const deptMap={};
-  allData.forEach(r=>{
-    const dow=getDow(r.date);
-    if(dow<1||dow>5) return;
-    if(dowFilter!==null&&dow!==dowFilter) return;
-    deptMap[r.dept]=(deptMap[r.dept]||0)+1;
-  });
-  const sorted=Object.entries(deptMap).sort((a,b)=>b[1]-a[1]).slice(0,10);
-  const total=sorted.reduce((s,[,v])=>s+v,0);
-  destroyChart('chartDowDept');
-  if(!sorted.length){
-    document.getElementById('chartDowDept')?.getContext('2d');
-    return;
-  }
-  const el=document.getElementById('chartDowDept');
-  if(!el) return;
-  // 차트 컨테이너 높이 학과수에 맞게
-  el.parentElement.style.height=Math.max(300,sorted.length*28)+'px';
-  charts.dowDept=new Chart(el,{
-    type:'bar',
-    data:{
-      labels:sorted.map(([k])=>k),
-      datasets:[{
-        label:'신청 인원',
-        data:sorted.map(([,v])=>v),
-        backgroundColor:sorted.map((_,i)=>YUHAN_COLORS[i%YUHAN_COLORS.length]+'cc'),
-        borderColor:sorted.map((_,i)=>YUHAN_COLORS[i%YUHAN_COLORS.length]),
-        borderWidth:1.5,borderRadius:4
-      }]
-    },
-    options:{
-      indexAxis:'y',
-      responsive:true,maintainAspectRatio:false,
-      plugins:{
-        legend:{display:false},
-        tooltip:{callbacks:{label:ctx=>ctx.parsed.x+'명 ('+(total?(ctx.parsed.x/total*100).toFixed(1):0)+'%)'}}
-      },
-      scales:{
-        x:{beginAtZero:true,ticks:{stepSize:1},title:{display:true,text:'신청 인원'}},
-        y:{ticks:{font:{size:10}}}
-      }
-    }
-  });
 }
 
 function renderDowDeptTable(){
   const selVal=document.getElementById('dowDeptSelect')?.value||'';
   const dowFilter=selVal?parseInt(selVal):null;
+  // 학과별 요일별 집계
   const deptDow={};
-  allData.forEach(r=>{
+  getApprovedData().forEach(r=>{
     const dow=getDow(r.date);
     if(dow<1||dow>5) return;
     if(dowFilter!==null&&dow!==dowFilter) return;
     if(!deptDow[r.dept]) deptDow[r.dept]={1:0,2:0,3:0,4:0,5:0};
     deptDow[r.dept][dow]++;
   });
-  const sorted=Object.entries(deptDow)
-    .map(([dept,dows])=>({dept,dows,total:Object.values(dows).reduce((a,b)=>a+b,0)}))
-    .sort((a,b)=>b.total-a.total);
+  const sorted=Object.entries(deptDow).map(([dept,dows])=>({dept,dows,total:Object.values(dows).reduce((a,b)=>a+b,0)})).sort((a,b)=>b.total-a.total);
   const tbody=document.getElementById('dowDeptTableBody');
   if(!tbody) return;
-  if(!sorted.length){
-    tbody.innerHTML='<tr><td colspan="8" style="text-align:center;color:var(--gray500);padding:14px">데이터 없음</td></tr>';
-    destroyChart('chartDowDept'); return;
-  }
-  // 전체 테이블
+  if(!sorted.length){tbody.innerHTML='<tr><td colspan="8" style="text-align:center;color:var(--gray500);padding:14px">데이터 없음</td></tr>';return;}
   tbody.innerHTML=sorted.map((row,i)=>'<tr>'+
     '<td><b>'+(i+1)+'</b></td><td>'+esc(row.dept)+'</td>'+
     [1,2,3,4,5].map(d=>'<td style="text-align:center">'+(row.dows[d]||0)+'</td>').join('')+
     '<td style="text-align:center;font-weight:800;color:var(--primary)">'+row.total+'</td>'+
   '</tr>').join('');
-  // 상위 10개 가로 바 차트
-  const top10=sorted.slice(0,10);
-  const wrap=document.getElementById('chartDowDeptWrap');
-  if(wrap) wrap.style.height=Math.max(220,top10.length*30)+'px';
-  destroyChart('chartDowDept');
-  const el=document.getElementById('chartDowDept');
-  if(!el) return;
-  charts.dowDept=new Chart(el,{
-    type:'bar',
-    data:{
-      labels:top10.map(r=>r.dept),
-      datasets:[
-        {label:'월',data:top10.map(r=>r.dows[1]),backgroundColor:DAY_COLORS[1]+'99',borderColor:DAY_COLORS[1],borderWidth:1},
-        {label:'화',data:top10.map(r=>r.dows[2]),backgroundColor:DAY_COLORS[2]+'99',borderColor:DAY_COLORS[2],borderWidth:1},
-        {label:'수',data:top10.map(r=>r.dows[3]),backgroundColor:DAY_COLORS[3]+'99',borderColor:DAY_COLORS[3],borderWidth:1},
-        {label:'목',data:top10.map(r=>r.dows[4]),backgroundColor:DAY_COLORS[4]+'99',borderColor:DAY_COLORS[4],borderWidth:1},
-        {label:'금',data:top10.map(r=>r.dows[5]),backgroundColor:DAY_COLORS[5]+'99',borderColor:DAY_COLORS[5],borderWidth:1},
-      ]
-    },
-    options:{
-      indexAxis:'y',
-      responsive:true,maintainAspectRatio:false,
-      plugins:{legend:{position:'bottom'}},
-      scales:{x:{beginAtZero:true,ticks:{stepSize:1},stacked:true},y:{stacked:true,ticks:{font:{size:10}}}}
-    }
-  });
 }
 
 function getDeptFiltered(){
   const from=document.getElementById('deptDateFrom')?.value;
   const to=document.getElementById('deptDateTo')?.value;
-  if(!from&&!to) return allData;
-  return allData.filter(r=>{
+  const base=getApprovedData();
+  if(!from&&!to) return base;
+  return base.filter(r=>{
     if(from&&r.date<from) return false;
     if(to&&r.date>to) return false;
     return true;
   });
 }
+function getGradeFiltered(){
+  const from=document.getElementById('gradeDateFrom')?.value;
+  const to=document.getElementById('gradeDateTo')?.value;
+  const base=getApprovedData();
+  if(!from&&!to) return base;
+  return base.filter(r=>{
+    if(from&&r.date<from) return false;
+    if(to&&r.date>to) return false;
+    return true;
+  });
+}
+
 function clearDeptFilter(){
   const f=document.getElementById('deptDateFrom');
   const t=document.getElementById('deptDateTo');
@@ -1049,50 +1095,16 @@ function renderDeptTab(){
   document.getElementById('deptTableBody').innerHTML=sorted.map(([dept,cnt],i)=>'<tr><td><b>'+(i+1)+'</b></td><td>'+esc(dept)+'</td><td><b>'+cnt+'명</b></td><td><span class="badge badge-blue">'+(total?(cnt/total*100).toFixed(1):0)+'%</span></td></tr>').join('');
 }
 
-function getGradeFiltered(){
-  const from=document.getElementById('gradeDateFrom')?.value;
-  const to=document.getElementById('gradeDateTo')?.value;
-  if(!from&&!to) return allData;
-  return allData.filter(r=>{
-    if(from&&r.date<from) return false;
-    if(to&&r.date>to) return false;
-    return true;
-  });
-}
-function clearGradeFilter(){
-  const f=document.getElementById('gradeDateFrom');const t=document.getElementById('gradeDateTo');
-  if(f)f.value='';if(t)t.value='';
-  renderGradeTab();
-}
 function renderGradeTab(){
-  const filtered=getGradeFiltered();
-  const gm={'1학년':0,'2학년':0,'3학년':0};
-  filtered.forEach(r=>{if(gm[r.grade]!==undefined)gm[r.grade]++;});
-  const total=filtered.length;
+  const gm={'1학년':0,'2학년':0,'3학년':0};allData.forEach(r=>{if(gm[r.grade]!==undefined)gm[r.grade]++;});
+  const total=allData.length;
   destroyChart('chartGrade');
-  charts.grade=safeChart('chartGrade',{
-    type:'doughnut',
-    data:{labels:Object.keys(gm),datasets:[{data:Object.values(gm),backgroundColor:YUHAN_COLORS.slice(0,3),borderWidth:2}]},
-    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom'}}}
-  });
-  const dates=[...new Set(filtered.map(r=>r.date))].sort();
-  const grades=['1학년','2학년','3학년'];
+  charts.grade=safeChart('chartGrade',{type:'doughnut',data:{labels:Object.keys(gm),datasets:[{data:Object.values(gm),backgroundColor:YUHAN_COLORS.slice(0,3),borderWidth:2}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom'}}}});
+  const dates=[...new Set(allData.map(r=>r.date))].sort();const grades=['1학년','2학년','3학년'];
   destroyChart('chartGradeDaily');
-  charts.gradeDaily=safeChart('chartGradeDaily',{
-    type:'line',
-    data:{labels:dates.map(d=>d.slice(5)),datasets:grades.map((g,i)=>({
-      label:g,
-      data:dates.map(d=>filtered.filter(r=>r.date===d&&r.grade===g).length),
-      borderColor:YUHAN_COLORS[i],backgroundColor:YUHAN_COLORS[i]+'33',
-      tension:.3,fill:true,pointRadius:3
-    }))},
-    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom'}},scales:{y:{beginAtZero:true,ticks:{stepSize:1}}}}
-  });
+  charts.gradeDaily=safeChart('chartGradeDaily',{type:'line',data:{labels:dates.map(d=>d.slice(5)),datasets:grades.map((g,i)=>({label:g,data:dates.map(d=>allData.filter(r=>r.date===d&&r.grade===g).length),borderColor:YUHAN_COLORS[i],backgroundColor:YUHAN_COLORS[i]+'33',tension:.3,fill:true,pointRadius:3}))},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom'}},scales:{y:{beginAtZero:true,ticks:{stepSize:1}}}}});
   document.getElementById('gradeTableBody').innerHTML=Object.entries(gm).map(([grade,cnt])=>{
-    const topDept=Object.entries(
-      filtered.filter(r=>r.grade===grade)
-        .reduce((acc,r)=>{acc[r.dept]=(acc[r.dept]||0)+1;return acc;},{})
-    ).sort((a,b)=>b[1]-a[1])[0];
+    const topDept=Object.entries(allData.filter(r=>r.grade===grade).reduce((acc,r)=>{acc[r.dept]=(acc[r.dept]||0)+1;return acc;},{})).sort((a,b)=>b[1]-a[1])[0];
     return '<tr><td><b>'+esc(grade)+'</b></td><td>'+cnt+'명</td><td><span class="badge badge-green">'+(total?((cnt/total)*100).toFixed(1):0)+'%</span></td><td>'+esc(topDept?topDept[0]:'-')+'</td></tr>';
   }).join('');
 }
@@ -1100,68 +1112,126 @@ function renderGradeTab(){
 // ── 시간대별 ── allData 사용 (GAS 데이터 반영됨)
 function renderTimeTab(){
   const df=document.getElementById('timeFilterDate').value;
-  const filtered=df?allData.filter(r=>r.date===df):allData;
-  // 8:00~13:00 5분 단위 슬롯
-  const slots=[];
-  for(let h=8;h<=12;h++) for(let m=0;m<60;m+=5) slots.push(String(h).padStart(2,'0')+':'+String(m).padStart(2,'0'));
-  slots.push('13:00');
+  const base=getApprovedData(); const filtered=df?base.filter(r=>r.date===df):base;
+  const slots=[];for(let h=8;h<=10;h++)for(let m=0;m<60;m+=5)slots.push(String(h).padStart(2,'0')+':'+String(m).padStart(2,'0'));
   const countMap={};slots.forEach(s=>countMap[s]=0);
   filtered.forEach(r=>{
-    if(!r.applyTime) return;
-    const parts=r.applyTime.split(':').map(Number);
-    const h=parts[0]; const m=parts[1]||0;
-    if(h<8||h>13||(h===13&&m>0)) return;
+    if(!r.applyTime)return;
+    const[h,m]=r.applyTime.split(':').map(Number);
     const key=String(h).padStart(2,'0')+':'+String(Math.floor(m/5)*5).padStart(2,'0');
-    if(key in countMap) countMap[key]++;
+    if(countMap[key]!==undefined)countMap[key]++;
   });
+  const active=slots.filter(s=>countMap[s]>0);const labels=active.length>0?active:slots.slice(1,13);
   destroyChart('chartTime');
-  charts.time=safeChart('chartTime',{
-    type:'line',
-    data:{
-      labels:slots,
-      datasets:[{
-        label:'신청 인원',
-        data:slots.map(s=>countMap[s]||0),
-        borderColor:YUHAN_COLORS[0],
-        backgroundColor:YUHAN_COLORS[0]+'22',
-        borderWidth:2,
-        pointRadius:4,
-        pointBackgroundColor:slots.map(s=>{
-          const h=parseInt(s);
-          if(h<9) return YUHAN_COLORS[0];
-          if(h<10) return YUHAN_COLORS[2];
-          if(h<11) return YUHAN_COLORS[1];
-          return YUHAN_COLORS[5];
-        }),
-        pointHoverRadius:7,
-        fill:true,
-        tension:0.3
-      }]
-    },
-    options:{
-      responsive:true,maintainAspectRatio:false,
-      plugins:{
-        legend:{display:false},
-        tooltip:{callbacks:{title:ctx=>'⏰ '+ctx[0].label,label:ctx=>'신청: '+ctx.parsed.y+'명'}}
-      },
-      scales:{
-        y:{beginAtZero:true,ticks:{stepSize:1},title:{display:true,text:'신청 인원'}},
-        x:{ticks:{font:{size:9},maxRotation:60},title:{display:true,text:'신청 시간'}}
-      }
-    }
-  });
+  charts.time=safeChart('chartTime',{type:'bar',data:{labels,datasets:[{label:'신청',data:labels.map(s=>countMap[s]||0),backgroundColor:YUHAN_COLORS[1]+'cc',borderColor:YUHAN_COLORS[1],borderWidth:1.5,borderRadius:4}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,ticks:{stepSize:1}},x:{ticks:{font:{size:10},maxRotation:45}}}}});
   let cumul=0;
-  const rows=slots.map(s=>{
-    const cnt=countMap[s]||0; cumul+=cnt;
-    if(cnt===0) return '';
-    const h=parseInt(s);
-    const color=h<9?'var(--primary)':h<10?'var(--green)':h<11?'var(--orange)':'var(--red)';
-    return '<tr><td><b style="color:'+color+'">'+s+'</b></td><td><b>'+cnt+'명</b></td><td>'+cumul+'명</td></tr>';
-  }).filter(Boolean).join('');
-  document.getElementById('timeTableBody').innerHTML=rows||'<tr><td colspan="3" style="text-align:center;color:var(--gray500);padding:14px">데이터 없음</td></tr>';
+  document.getElementById('timeTableBody').innerHTML=labels.map(s=>{const cnt=countMap[s]||0;cumul+=cnt;return cnt>0?'<tr><td>'+s+'</td><td><b>'+cnt+'명</b></td><td>'+cumul+'명</td></tr>':''}).join('')||'<tr><td colspan="3" style="text-align:center;color:var(--gray500)">데이터 없음</td></tr>';
 }
 
 // ── 신청 목록 ── allData 사용
+
+// ── 학생별 탭 ──
+function clearStudentFilter(){
+  const f=document.getElementById('studentDateFrom');
+  const t=document.getElementById('studentDateTo');
+  const s=document.getElementById('studentSearch');
+  if(f)f.value='';if(t)t.value='';if(s)s.value='';
+  renderStudentTab();
+}
+
+function renderStudentTab(){
+  const from=document.getElementById('studentDateFrom')?.value;
+  const to=document.getElementById('studentDateTo')?.value;
+  const kw=(document.getElementById('studentSearch')?.value||'').trim().toLowerCase();
+  // 승인 데이터 기반
+  let base=getApprovedData();
+  if(from) base=base.filter(r=>r.date>=from);
+  if(to)   base=base.filter(r=>r.date<=to);
+
+  // 학생별 집계
+  const map={};
+  base.forEach(function(r){
+    const key=r.studentId;
+    if(!map[key]){
+      map[key]={studentId:r.studentId,name:r.name,dept:r.dept,grade:r.grade,count:0,lastDate:'',payMethods:{}};
+    }
+    map[key].count++;
+    if(!map[key].lastDate||r.date>map[key].lastDate) map[key].lastDate=r.date;
+    map[key].payMethods[r.payMethod]=(map[key].payMethods[r.payMethod]||0)+1;
+  });
+
+  // 검색 필터
+  let sorted=Object.values(map).sort(function(a,b){return b.count-a.count;});
+  if(kw){
+    sorted=sorted.filter(function(s){
+      return s.studentId.toLowerCase().includes(kw)||
+             s.name.toLowerCase().includes(kw)||
+             s.dept.toLowerCase().includes(kw);
+    });
+  }
+
+  const totalEl=document.getElementById('studentTotal');
+  if(totalEl) totalEl.textContent='총 '+sorted.length+'명 (승인 기준 '+base.length+'건)';
+
+  // 상위 30명 차트
+  const top30=sorted.slice(0,30);
+  destroyChart('chartStudent');
+  const el=document.getElementById('chartStudent');
+  if(el&&top30.length){
+    charts.student=new Chart(el,{
+      type:'bar',
+      data:{
+        labels:top30.map(function(s){return s.name+'('+s.studentId.slice(-4)+')'}),
+        datasets:[{
+          label:'신청 횟수',
+          data:top30.map(function(s){return s.count;}),
+          backgroundColor:top30.map(function(_,i){return YUHAN_COLORS[i%YUHAN_COLORS.length]+'cc';}),
+          borderColor:top30.map(function(_,i){return YUHAN_COLORS[i%YUHAN_COLORS.length];}),
+          borderWidth:1.5,borderRadius:4
+        }]
+      },
+      options:{
+        responsive:true,maintainAspectRatio:false,
+        plugins:{legend:{display:false},
+          tooltip:{callbacks:{
+            title:function(ctx){
+              const s=top30[ctx[0].dataIndex];
+              return s.name+' ('+s.studentId+')';
+            },
+            label:function(ctx){return '신청 '+ctx.parsed.y+'회';}
+          }}
+        },
+        scales:{
+          y:{beginAtZero:true,ticks:{stepSize:1},title:{display:true,text:'신청 횟수'}},
+          x:{ticks:{font:{size:9},maxRotation:60}}
+        }
+      }
+    });
+  }
+
+  // 전체 테이블
+  const tbody=document.getElementById('studentTableBody');
+  if(!tbody) return;
+  if(!sorted.length){
+    tbody.innerHTML='<tr><td colspan="8" style="text-align:center;color:var(--gray500);padding:14px">데이터 없음</td></tr>';
+    return;
+  }
+  tbody.innerHTML=sorted.map(function(s,i){
+    const topPay=Object.entries(s.payMethods).sort(function(a,b){return b[1]-a[1];})[0];
+    const payLabel=topPay?topPay[0]:'—';
+    const rankBadge=i<3?'<b style="color:'+(i===0?'#f59e0b':i===1?'#9ca3af':'#cd7c2f')+'">'+(i===1?'🥈':i===2?'🥉':'🥇')+'</b>':'<span>'+(i+1)+'</span>';
+    return '<tr>'
+      +'<td>'+rankBadge+'</td>'
+      +'<td>'+esc(s.studentId)+'</td>'
+      +'<td><b>'+esc(s.name)+'</b></td>'
+      +'<td>'+esc(s.dept)+'</td>'
+      +'<td>'+esc(s.grade)+'</td>'
+      +'<td style="text-align:center;font-weight:800;color:var(--primary)">'+s.count+'회</td>'
+      +'<td>'+esc(s.lastDate)+'</td>'
+      +'<td><span class="badge '+(payLabel==='계좌이체'?'badge-blue':'badge-amber')+'">'+esc(payLabel)+'</span></td>'
+      +'</tr>';
+  }).join('');
+}
 function renderListTab(){
   const df=document.getElementById('listFilterDate').value;
   const search=document.getElementById('listSearch').value.trim().toLowerCase();
@@ -1207,7 +1277,7 @@ function renderSignSheet(){
   const qty=info.qty;
   const dt=new Date(date+'T00:00:00');
   // allData에서 해당 날짜 신청자 추출 (GAS 실데이터 반영)
-  const applicants=allData.filter(r=>r.date===date).sort((a,b)=>a.applyTime>b.applyTime?1:-1);
+  const applicants=getApprovedData().filter(r=>r.date===date).sort((a,b)=>a.applyTime>b.applyTime?1:-1);
   let rows='';
   for(let i=0;i<qty;i++){
     const ap=applicants[i];const isReg=!!ap;
@@ -1266,7 +1336,7 @@ function printSignSheet(){
 function renderChecklist(){
   const target=parseInt(document.getElementById('checkTarget').value)||6000;
   const monthMap={1:0,2:0,3:0,4:0,5:0,6:0,7:0,8:0,9:0,10:0,11:0,12:0};
-  allData.forEach(r=>{if(!r.date)return;const m=parseInt(r.date.split('-')[1]);monthMap[m]=(monthMap[m]||0)+1;});
+  getApprovedData().forEach(r=>{if(!r.date)return;const m=parseInt(r.date.split('-')[1]);monthMap[m]=(monthMap[m]||0)+1;});
   const m123=monthMap[1]+monthMap[2]+monthMap[3];
   const firstHalf=m123+monthMap[4]+monthMap[5]+monthMap[6];
   const totalAll=Object.values(monthMap).reduce((a,b)=>a+b,0);
@@ -1412,6 +1482,8 @@ function initSettingsUI(){
       }
     });
   }
+  // 학과 목록 렌더
+  renderDeptList();
 }
 
 function saveTimeSettings(){
@@ -1597,9 +1669,90 @@ function exportCSV(){
   const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='천원의아침밥_'+fDate(new Date())+'.csv';a.click();
 }
 
+
+// ── 학과 관리 ──
+const DEFAULT_DEPT_LIST = ['기계시스템전공','전기공학전공','전자공학전공','산업안전전공','산업디자인전공','컴퓨터소프트웨어전공','소방설비안전전공','시각디자인전공','식품영양학과','호텔관광전공','일본비즈니스전공','경영정보전공','보건의료행정학과','컴퓨터정보통신전공','IT비즈니스전공','애니메이션웹툰전공','패션디자인전공','실내건축전공','인공지능전공','게임콘텐츠전공','사회복지전공','호텔조리전공','아동보육전공','세무회계전공','항공경영전공','광고미디어전공','유한바이오제약전공','자유전공학과','피부메이크업전공','뷰티화장품전공','카페베이커리전공','방송영상전공','방송문예창작전공','유한생명화공전공','반려동물보건학과','스포츠재활전공','작업치료과','방송연예전공','응급구조과','반려동물산업전공','항공서비스학과','치위생과','기계시스템공학과(심화)','시각디자인학과(심화)','보건의료행정학과(심화)','패션디자인학과(심화)','실내건축학과(심화)','사회복지학과(심화)','유한바이오제약학과(심화)','컴퓨터공학과(심화)'];
+
+function getDeptList(){
+  return LS.get('dept_list', DEFAULT_DEPT_LIST);
+}
+
+function renderDeptList(){
+  const depts = getDeptList();
+  const wrap = document.getElementById('deptListWrap');
+  if(!wrap) return;
+  if(!depts.length){
+    wrap.innerHTML = '<div style="text-align:center;color:var(--gray500);padding:14px;font-size:12px">학과가 없습니다. 추가해주세요.</div>';
+    return;
+  }
+  wrap.innerHTML = depts.map(function(d,i){
+    return '<div style="display:flex;align-items:center;gap:6px;padding:5px 4px;border-bottom:1px solid var(--gray100)">'
+      +'<span style="font-size:11px;color:var(--gray500);width:22px;text-align:right">'+(i+1)+'</span>'
+      +'<input type="text" value="'+esc(d)+'" data-idx="'+i+'"'
+      +' style="flex:1;padding:4px 8px;border:1.5px solid var(--gray200);border-radius:5px;font-size:12px;font-family:inherit"'
+      +' onchange="updateDeptItem(this)">'
+      +'<button onclick="moveDeptItem('+i+',-1)" style="padding:2px 6px;border:1px solid var(--gray200);border-radius:4px;background:#fff;cursor:pointer;font-size:11px" title="위로">▲</button>'
+      +'<button onclick="moveDeptItem('+i+',1)" style="padding:2px 6px;border:1px solid var(--gray200);border-radius:4px;background:#fff;cursor:pointer;font-size:11px" title="아래로">▼</button>'
+      +'<button onclick="deleteDeptItem('+i+')" style="padding:2px 8px;border:none;border-radius:4px;background:var(--red);color:#fff;cursor:pointer;font-size:11px">✕</button>'
+      +'</div>';
+  }).join('');
+}
+
+function addDeptItem(){
+  const inp = document.getElementById('newDeptInput');
+  const val = inp ? inp.value.trim() : '';
+  if(!val){ alert('학과명을 입력해주세요.'); return; }
+  const depts = getDeptList();
+  if(depts.includes(val)){ alert('이미 존재하는 학과명입니다.'); return; }
+  depts.push(val);
+  LS.set('dept_list', depts);
+  inp.value = '';
+  renderDeptList();
+}
+
+function updateDeptItem(el){
+  const idx = parseInt(el.dataset.idx);
+  const val = el.value.trim();
+  if(!val){ alert('학과명을 비워둘 수 없습니다.'); renderDeptList(); return; }
+  const depts = getDeptList();
+  depts[idx] = val;
+  LS.set('dept_list', depts);
+}
+
+function deleteDeptItem(idx){
+  const depts = getDeptList();
+  if(!confirm('"'+depts[idx]+'" 학과를 삭제하시겠습니까?')) return;
+  depts.splice(idx, 1);
+  LS.set('dept_list', depts);
+  renderDeptList();
+}
+
+function moveDeptItem(idx, dir){
+  const depts = getDeptList();
+  const newIdx = idx + dir;
+  if(newIdx < 0 || newIdx >= depts.length) return;
+  const tmp = depts[idx]; depts[idx] = depts[newIdx]; depts[newIdx] = tmp;
+  LS.set('dept_list', depts);
+  renderDeptList();
+}
+
+function saveDeptList(){
+  const depts = getDeptList();
+  if(!depts.length){ alert('학과 목록이 비어있습니다.'); return; }
+  LS.set('dept_list', depts);
+  showMsg('deptSaveMsg');
+}
+
+function resetDeptList(){
+  if(!confirm('기본 학과 목록으로 초기화하시겠습니까?')) return;
+  LS.set('dept_list', DEFAULT_DEPT_LIST);
+  renderDeptList();
+  showMsg('deptSaveMsg');
+}
+
 // ── 데모용 샘플 데이터 ──
 function generateSampleData(){
-  const depts=['기계시스템전공','전기공학전공','컴퓨터소프트웨어전공','식품영양학과','경영정보전공','치위생과','작업치료과','반려동물보건학과','사회복지전공','항공경영전공'];
+  const depts=getDeptList();
   const grades=['1학년','2학년','3학년'];
   const pays=['계좌이체','현금지급'];
   const operDates=Object.keys(MENU_DATA).sort();
@@ -1614,22 +1767,20 @@ function generateSampleData(){
 
 // ── 자동 갱신 (60초) ──
 function startAutoRefresh(){
-  if(liveRefreshTimer) clearInterval(liveRefreshTimer);
-  liveRefreshTimer = setInterval(()=>{
+  if(liveRefreshTimer)clearInterval(liveRefreshTimer);
+  liveRefreshTimer=setInterval(()=>{
     if(!IS_DEMO){
-      fetchFromGAS({action:'getAll'}, function(data, err){
-        if(!err && Array.isArray(data)){
-          allData = data;
+      fetchFromGAS({action:'getAll'},function(data,err){
+        if(!err&&Array.isArray(data)){
+          allData=data;
           setGasStatus(true);
         } else {
-          setGasStatus(false);
+          setGasStatus(false); // 자동갱신 실패 시 상태 업데이트
         }
-        // 실시간 탭은 항상 갱신
-        renderLive(); renderLiveList(); renderAllDatesTable(); renderKPI();
-        // 나머지 탭은 탭 전환 시 최신 데이터로 렌더됨 (switchTab 참조)
+        renderLive();renderLiveList();renderAllDatesTable();renderKPI();
       });
     }
-  }, 60000);
+  },60000);
 }
 
 document.addEventListener('DOMContentLoaded',function(){loadAll();startAutoRefresh();});
