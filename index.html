@@ -253,6 +253,8 @@ tr.waiting-row td{opacity:.6;}
   <div id="approvalBanner" style="display:none" class="approval-mode-banner">
     <span>✋ 현장 승인 모드 — 실제로 온 학생만 체크하세요</span>
     <span class="ab-count">승인 <span id="approvedCount">0</span>명 / 대기 <span id="waitingCount">0</span>명</span>
+    <button onclick="approveAll()" style="margin-left:auto;padding:4px 12px;background:#fff;color:#7c3aed;border:1.5px solid #7c3aed;border-radius:7px;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap">✅ 전체 일괄승인</button>
+    <button onclick="clearAllApproval()" style="padding:4px 10px;background:transparent;color:#fff;border:1.5px solid rgba(255,255,255,.5);border-radius:7px;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap">↺ 전체 취소</button>
   </div>
   <div class="table-panel" style="margin-top:4px">
     <div class="table-panel-header">
@@ -425,6 +427,50 @@ tr.waiting-row td{opacity:.6;}
     <button class="filter-btn" style="background:var(--gray500)" onclick="clearStudentFilter()">전체</button>
     <input type="text" id="studentSearch" class="search-input" placeholder="학번·성명·학과 검색" oninput="renderStudentTab()" style="width:160px">
   </div>
+  <!-- 학생별 대시보드 -->
+  <div id="studentDashboard" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:8px;margin-bottom:12px">
+    <div class="kpi-card" style="border-top:3px solid #1d4ed8">
+      <div class="kpi-icon">📋</div>
+      <div class="kpi-val" id="sd-total" style="color:#1d4ed8">—</div>
+      <div class="kpi-label">총 이용(신청)수</div>
+    </div>
+    <div class="kpi-card" style="border-top:3px solid #7c3aed">
+      <div class="kpi-icon">👥</div>
+      <div class="kpi-val" id="sd-unique" style="color:#7c3aed">—</div>
+      <div class="kpi-label">총 이용학생수</div>
+    </div>
+    <div class="kpi-card" style="border-top:3px solid #22c55e">
+      <div class="kpi-icon">1️⃣</div>
+      <div class="kpi-val" id="sd-c1" style="color:#22c55e">—</div>
+      <div class="kpi-label">1회 신청</div>
+    </div>
+    <div class="kpi-card" style="border-top:3px solid #3b82f6">
+      <div class="kpi-icon">2️⃣</div>
+      <div class="kpi-val" id="sd-c2" style="color:#3b82f6">—</div>
+      <div class="kpi-label">2회 신청</div>
+    </div>
+    <div class="kpi-card" style="border-top:3px solid #f59e0b">
+      <div class="kpi-icon">3️⃣</div>
+      <div class="kpi-val" id="sd-c3" style="color:#f59e0b">—</div>
+      <div class="kpi-label">3회 신청</div>
+    </div>
+    <div class="kpi-card" style="border-top:3px solid #f97316">
+      <div class="kpi-icon">4️⃣</div>
+      <div class="kpi-val" id="sd-c4" style="color:#f97316">—</div>
+      <div class="kpi-label">4회 신청</div>
+    </div>
+    <div class="kpi-card" style="border-top:3px solid #ef4444">
+      <div class="kpi-icon">🔥</div>
+      <div class="kpi-val" id="sd-c5to9" style="color:#ef4444">—</div>
+      <div class="kpi-label">5~9회 신청</div>
+    </div>
+    <div class="kpi-card" style="border-top:3px solid #991b1b">
+      <div class="kpi-icon">⭐</div>
+      <div class="kpi-val" id="sd-c10" style="color:#991b1b">—</div>
+      <div class="kpi-label">10회 이상</div>
+    </div>
+  </div>
+
   <div class="chart-panel" style="margin-bottom:14px">
     <h3>👤 학생별 신청 현황 (상위 30명)</h3>
     <div style="position:relative;height:320px"><canvas id="chartStudent"></canvas></div>
@@ -842,6 +888,31 @@ function toggleApproval(date,sid){
   if(approvedSet.has(k)) approvedSet.delete(k); else approvedSet.add(k);
   saveApproved(); renderLive(); renderLiveList();
 }
+// ── 일괄 승인 / 전체 취소 ──
+function approveAll(){
+  var date = selectedLiveDate;
+  var dayData = allData.filter(function(r){ return r.date === date; });
+  if(!dayData.length){ alert('해당 날짜에 신청 데이터가 없습니다.'); return; }
+  if(!confirm(date + ' 신청자 ' + dayData.length + '명을 전체 승인하시겠습니까?')) return;
+  dayData.forEach(function(r){
+    approvedSet.add(approvalKey(date, r.studentId));
+  });
+  saveApproved();
+  renderLive();
+  renderLiveList();
+}
+
+function clearAllApproval(){
+  var date = selectedLiveDate;
+  var keys = Array.from(approvedSet).filter(function(k){ return k.indexOf(date+'_') === 0; });
+  if(!keys.length){ alert('취소할 승인 데이터가 없습니다.'); return; }
+  if(!confirm(date + ' 승인된 ' + keys.length + '명을 전체 취소하시겠습니까?')) return;
+  keys.forEach(function(k){ approvedSet.delete(k); });
+  saveApproved();
+  renderLive();
+  renderLiveList();
+}
+
 function isApprovalMode(date){
   var info=MENU_DATA[date]; if(!info) return false;
   var allSold=allData.filter(function(r){return r.date===date;}).length;
@@ -1206,6 +1277,28 @@ function renderStudentTab(){
 
   const totalEl=document.getElementById('studentTotal');
   if(totalEl) totalEl.textContent='총 '+sorted.length+'명 (승인 기준 '+base.length+'건)';
+
+  // ── 대시보드 집계 ──
+  // sorted: 검색 필터 적용 전 전체 학생 목록 (필터 후 sorted를 쓰면 검색어에 따라 수치가 변동)
+  // → 기간 필터만 적용된 base 기준으로 집계 (검색어와 무관한 전체 현황)
+  var allStudents=Object.values(map); // 검색 필터 이전 전체 학생 map
+  var sdTotal   = base.length;
+  var sdUnique  = allStudents.length;
+  var sdC1      = allStudents.filter(function(s){return s.count===1;}).length;
+  var sdC2      = allStudents.filter(function(s){return s.count===2;}).length;
+  var sdC3      = allStudents.filter(function(s){return s.count===3;}).length;
+  var sdC4      = allStudents.filter(function(s){return s.count===4;}).length;
+  var sdC5to9   = allStudents.filter(function(s){return s.count>=5&&s.count<=9;}).length;
+  var sdC10     = allStudents.filter(function(s){return s.count>=10;}).length;
+  var setSD=function(id,val){var el=document.getElementById(id);if(el)el.textContent=val;};
+  setSD('sd-total',  sdTotal   +'건');
+  setSD('sd-unique', sdUnique  +'명');
+  setSD('sd-c1',     sdC1      +'명');
+  setSD('sd-c2',     sdC2      +'명');
+  setSD('sd-c3',     sdC3      +'명');
+  setSD('sd-c4',     sdC4      +'명');
+  setSD('sd-c5to9',  sdC5to9   +'명');
+  setSD('sd-c10',    sdC10     +'명');
 
   // 상위 30명 차트
   const top30=sorted.slice(0,30);
