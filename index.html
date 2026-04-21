@@ -60,6 +60,7 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--gray100);min-height:
 .live-date-tabs{display:flex;gap:4px;flex-wrap:wrap}
 .live-date-tab{padding:4px 9px;border:1.5px solid var(--gray200);border-radius:20px;background:#fff;cursor:pointer;font-size:11px;font-weight:600;color:var(--gray500);font-family:inherit;transition:all .2s}
 .live-date-tab.active{border-color:var(--primary);background:var(--primary);color:#fff}
+.live-date-tab.past-date{background:var(--gray100);color:var(--gray500)}
 /* KPI */
 .kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:9px;margin-bottom:14px}
 .kpi-card{background:#fff;border-radius:9px;padding:13px;box-shadow:0 1px 5px rgba(0,0,0,.07);text-align:center}
@@ -599,6 +600,8 @@ let MENU_DATA = {};   // GAS 식단 시트 (또는 localStorage fallback)
 let charts    = {};
 let selectedLiveDate = '';
 let liveRefreshTimer = null;
+let liveStatsTimer   = null;   // 실시간 빠른 갱신 타이머 (15초)
+let liveStatsCache   = {};     // getStats 응답 캐시 {date: {sold,remain,total}}
 
 // ── 기본 메뉴 데이터 (GAS 연결 전 fallback) ──
 function getDefaultMenuData() {
@@ -725,6 +728,19 @@ function switchTab(id){
   document.querySelectorAll('.tab-item').forEach((el,i)=>el.classList.toggle('active',ids[i]===id));
   document.querySelectorAll('.tab-content').forEach(el=>el.classList.remove('active'));
   document.getElementById('tab-'+id).classList.add('active');
+  // 탭 전환 시 최신 데이터로 해당 탭 렌더 (allData 로드된 경우)
+  if(allData.length > 0){
+    if(id==='overview')      { renderKPI(); renderOverviewCharts(); }
+    else if(id==='dow')      { renderDowTab(); }
+    else if(id==='dept')     { renderDeptTab(); }
+    else if(id==='grade')    { renderGradeTab(); }
+    else if(id==='time')     { renderTimeTab(); }
+    else if(id==='list')     { renderListTab(); }
+    else if(id==='checklist'){ renderChecklist(); }
+    else if(id==='student')  { renderStudentTab(); }
+    else if(id==='oper')     { renderAllDatesTable(); }
+    else if(id==='sign')     { buildSignDateSelect(); }
+  }
 }
 
 // ── 날짜 유틸 ──
@@ -773,14 +789,25 @@ function buildLiveDateTabs(){
   const container=document.getElementById('liveDateTabs');
   const today=fDate(new Date());
   const operDates=Object.keys(MENU_DATA).sort();
-  if(operDates.length===0){container.innerHTML='<span style="font-size:11px;color:var(--gray500)">식단 데이터 없음</span>';return;}
+  if(operDates.length===0){
+    container.innerHTML='<span style="font-size:11px;color:var(--gray500)">식단 데이터 없음</span>';
+    return;
+  }
+  // 기본 선택: 오늘 이후 첫 날짜, 없으면 가장 최근
   selectedLiveDate = operDates.find(d=>d>=today) || operDates[operDates.length-1];
-  const show=operDates.filter(d=>{const diff=(new Date(d)-new Date(today))/86400000;return diff>=-3&&diff<=14;}).slice(0,10);
-  container.innerHTML=show.map(d=>{
+  // 모든 운영일 표시 (지난 날짜 포함)
+  container.innerHTML=operDates.map(d=>{
     const dt=new Date(d+'T00:00:00');
     const label=(dt.getMonth()+1)+'/'+(dt.getDate())+'('+DAY_NAMES[dt.getDay()]+')';
-    return '<button class="live-date-tab'+(d===selectedLiveDate?' active':'')+'" onclick="selectLiveDate(\''+d+'\',this)">'+label+'</button>';
+    const isPast=d<today;
+    return '<button class="live-date-tab'+(d===selectedLiveDate?' active':'')+(isPast?' past-date':'')
+      +'" onclick="selectLiveDate(\''+d+'\',this)" style="'+(isPast?'opacity:.7':'')+'">'+label+'</button>';
   }).join('');
+  // 오늘 탭으로 스크롤
+  setTimeout(function(){
+    const activeBtn=container.querySelector('.live-date-tab.active');
+    if(activeBtn) activeBtn.scrollIntoView({behavior:'smooth',block:'nearest',inline:'center'});
+  },100);
 }
 
 function selectLiveDate(date,btn){
@@ -839,7 +866,14 @@ function renderLive(){
     return;
   }
   var total=info.qty;
-  var allSold=allData.filter(function(r){return r.date===date;}).length;
+  // liveStatsCache 우선 사용 (getStats 빠른 응답) → 없으면 allData 계산
+  var allSold;
+  var cache=liveStatsCache[date];
+  if(cache){
+    allSold=cache.sold;
+  } else {
+    allSold=allData.filter(function(r){return r.date===date;}).length;
+  }
   var apMode=isApprovalMode(date);
   var sold=apMode?getEffectiveSold(date):allSold;
   var remain=Math.max(0,total-sold);
@@ -1767,20 +1801,51 @@ function generateSampleData(){
 
 // ── 자동 갱신 (60초) ──
 function startAutoRefresh(){
-  if(liveRefreshTimer)clearInterval(liveRefreshTimer);
-  liveRefreshTimer=setInterval(()=>{
-    if(!IS_DEMO){
-      fetchFromGAS({action:'getAll'},function(data,err){
-        if(!err&&Array.isArray(data)){
-          allData=data;
+  // ── 실시간 빠른 갱신: 15초마다 getStats (판매수/잔여만) ──
+  if(liveStatsTimer) clearInterval(liveStatsTimer);
+  liveStatsTimer = setInterval(function(){
+    if(!IS_DEMO && selectedLiveDate){
+      var today = fDate(new Date());
+      fetchFromGAS({action:'getStats', date:selectedLiveDate}, function(data, err){
+        if(!err && data && data.status==='ok'){
+          liveStatsCache[selectedLiveDate] = {
+            sold:   data.sold,
+            remain: data.remain,
+            total:  data.total
+          };
+          // 수동종료 상태도 갱신
+          if(data.soldoutManual !== undefined){
+            var so = LS.get('soldout_settings',{manual:false,msg:''});
+            so.manual = (data.soldoutManual === true || data.soldoutManual === 'true');
+            if(data.soldoutMsg) so.msg = data.soldoutMsg;
+            LS.set('soldout_settings', so);
+          }
           setGasStatus(true);
         } else {
-          setGasStatus(false); // 자동갱신 실패 시 상태 업데이트
+          setGasStatus(false);
         }
-        renderLive();renderLiveList();renderAllDatesTable();renderKPI();
+        renderLive();
       });
     }
-  },60000);
+  }, 15000);
+
+  // ── 전체 데이터 갱신: 60초마다 getAll ──
+  if(liveRefreshTimer) clearInterval(liveRefreshTimer);
+  liveRefreshTimer = setInterval(function(){
+    if(!IS_DEMO){
+      fetchFromGAS({action:'getAll'}, function(data, err){
+        if(!err && Array.isArray(data)){
+          allData = data;
+          // 캐시 초기화 (getAll로 최신 데이터 확보)
+          liveStatsCache = {};
+          setGasStatus(true);
+        } else {
+          setGasStatus(false);
+        }
+        renderLive(); renderLiveList(); renderAllDatesTable(); renderKPI();
+      });
+    }
+  }, 60000);
 }
 
 document.addEventListener('DOMContentLoaded',function(){loadAll();startAutoRefresh();});
