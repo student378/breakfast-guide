@@ -825,10 +825,7 @@ function renderAll(){
 // ══════════════════════════════════════════════════════
 function isSoldOutState(date){
   var so=LS.get('soldout_settings',{manual:false});
-  if(so.manual) return true;
-  var info=MENU_DATA[date]; if(!info) return false;
-  var sold=getEffectiveSold(date);
-  return sold>=info.qty;
+  return so.manual; // 수동 판매종료만 체크 (수량 도달해도 자동 종료 안 함)
 }
 
 function buildLiveDateTabs(){
@@ -1919,7 +1916,7 @@ function startAutoRefresh(){
         renderLive();
       });
     }
-  }, 15000);
+  }, 5000);
 
   // ── 전체 데이터 갱신: 60초마다 getAll ──
   if(liveRefreshTimer) clearInterval(liveRefreshTimer);
