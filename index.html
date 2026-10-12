@@ -181,9 +181,24 @@ input:checked+.toggle-slider:before{transform:translateX(20px)}
 .approval-cb{width:20px;height:20px;cursor:pointer;accent-color:#7c3aed;}
 tr.approved-row td{background:#f5f3ff!important;}
 tr.waiting-row td{opacity:.6;}
+/* 로그인 오버레이 */
+.login-overlay{position:fixed;inset:0;z-index:2000;background:linear-gradient(135deg,#0f172a,#1e3a8a);display:flex;align-items:center;justify-content:center;padding:20px}
+.login-box{background:#fff;border-radius:16px;width:100%;max-width:340px;padding:26px 22px;text-align:center;box-shadow:0 12px 40px rgba(0,0,0,.35)}
+.login-box .login-icon{font-size:40px;margin-bottom:6px}
+.login-box h2{font-size:17px;font-weight:800;color:var(--primary-dark);margin-bottom:4px}
+.login-box p{font-size:11px;color:var(--gray500);margin-bottom:14px}
+.login-box input{width:100%;padding:11px 12px;border:1.5px solid var(--gray200);border-radius:9px;font-size:15px;font-family:inherit;outline:none;text-align:center;letter-spacing:2px}
+.login-box input:focus{border-color:var(--primary)}
+.login-box button{width:100%;margin-top:10px;padding:11px;background:var(--primary);color:#fff;border:none;border-radius:9px;font-size:14px;font-weight:700;font-family:inherit;cursor:pointer}
+.login-box button:disabled{background:var(--gray300);cursor:not-allowed}
+.login-msg{font-size:11px;color:var(--red);margin-top:9px;min-height:15px;font-weight:600}
+/* 정렬 버튼 */
+.sort-group{display:flex;gap:4px;margin-left:auto;margin-right:10px}
+.sort-btn{padding:4px 10px;border:1.5px solid var(--gray200);border-radius:20px;background:#fff;font-size:11px;font-weight:700;color:var(--gray500);font-family:inherit;cursor:pointer}
+.sort-btn.on{border-color:var(--primary);background:var(--primary);color:#fff}
 /* 인쇄 */
 @media print{
-  .admin-header,.tab-bar,.sign-controls,.hbtn,.loading-bar{display:none!important}
+  .login-overlay,.sort-group,.admin-header,.tab-bar,.sign-controls,.hbtn,.loading-bar{display:none!important}
   .tab-content{display:block!important;padding:0}
   .signature-outer{box-shadow:none;border-radius:0}
   body{background:#fff}
@@ -196,6 +211,18 @@ tr.waiting-row td{opacity:.6;}
 
 <div class="loading-bar" id="loadingBar"></div>
 
+<!-- 관리자 로그인 (비밀번호는 서버에서만 검증 — 화면 코드에는 존재하지 않음) -->
+<div class="login-overlay" id="loginOverlay">
+  <div class="login-box">
+    <div class="login-icon">🔒</div>
+    <h2>관리자 로그인</h2>
+    <p>천원의 아침밥 관리자 화면</p>
+    <input type="password" id="loginPw" placeholder="비밀번호" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()">
+    <button id="loginBtn" onclick="doLogin()">로그인</button>
+    <div class="login-msg" id="loginMsg"></div>
+  </div>
+</div>
+
 <div class="admin-header">
   <div class="left">
     <h1>🍱 천원의 아침밥 관리자 v5</h1>
@@ -204,6 +231,7 @@ tr.waiting-row td{opacity:.6;}
   <div class="right">
     <button class="hbtn hbtn-ghost" onclick="loadAll()">🔄 새로고침</button>
     <button class="hbtn hbtn-green" onclick="exportCSV()">📥 CSV</button>
+    <button class="hbtn hbtn-ghost" onclick="logout()">🔒 로그아웃</button>
   </div>
 </div>
 
@@ -259,6 +287,10 @@ tr.waiting-row td{opacity:.6;}
   <div class="table-panel" style="margin-top:4px">
     <div class="table-panel-header">
       <h3>🕐 실시간 신청 현황</h3>
+      <div class="sort-group">
+        <button class="sort-btn" id="sortLatestBtn" onclick="setLiveSort('latest')">⬇ 최신순</button>
+        <button class="sort-btn" id="sortOrderBtn" onclick="setLiveSort('order')">⬆ 신청순</button>
+      </div>
       <span id="liveListCount" style="font-size:11px;color:var(--gray500)"></span>
     </div>
     <div style="overflow-x:auto"><table>
@@ -608,18 +640,58 @@ const DAY_NAMES = ['일','월','화','수','목','금','토'];
 const DAY_COLORS = ['','#ef4444','#f97316','#22c55e','#1d4ed8','#8b5cf6'];
 const IS_DEMO = GAS_URL.includes('YOUR_DEPLOYMENT_ID');
 
-// ── 관리자 인증 (PIN) ──
-const ADMIN_PIN = '1234'; // ← 운영 전 반드시 변경
-(function(){
-  // 세션 중 1회만 인증
-  if(sessionStorage.getItem('yuhan_admin_ok')==='1') return;
-  const pin = prompt('🔒 관리자 PIN을 입력하세요:');
-  if(pin !== ADMIN_PIN){
-    document.body.innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:100vh;font-family:sans-serif;flex-direction:column;gap:16px"><div style="font-size:48px">🔒</div><div style="font-size:18px;font-weight:700;color:#1e3a8a">접근 권한이 없습니다</div><div style="font-size:13px;color:#6b7280">관리자만 접근 가능합니다</div></div>';
-    throw new Error('Auth failed');
-  }
-  sessionStorage.setItem('yuhan_admin_ok','1');
-})();
+// ── 관리자 인증 ──
+// 비밀번호는 이 파일에 존재하지 않습니다. GAS 서버(스크립트 속성 ADMIN_PW)에서만 검증하고,
+// 성공하면 서버가 발급한 임시 세션 토큰만 이 브라우저 탭(sessionStorage)에 보관합니다.
+let appStarted = false;
+function getToken(){ try{ return sessionStorage.getItem('yuhan_bf_admin_tok')||''; }catch(e){ return ''; } }
+function setToken(t){ try{ if(t) sessionStorage.setItem('yuhan_bf_admin_tok',t); else sessionStorage.removeItem('yuhan_bf_admin_tok'); }catch(e){} }
+function authed(){ return IS_DEMO || !!getToken(); }
+function showLogin(msg){
+  const ov=document.getElementById('loginOverlay'); if(!ov) return;
+  const wasHidden = ov.style.display==='none';
+  ov.style.display='flex';
+  if(msg && wasHidden){ const m=document.getElementById('loginMsg'); if(m) m.textContent=msg; }
+}
+function hideLogin(){
+  const ov=document.getElementById('loginOverlay'); if(ov) ov.style.display='none';
+  const m=document.getElementById('loginMsg'); if(m) m.textContent='';
+}
+function handleUnauthorized(){
+  setToken('');
+  showLogin('세션이 만료되었습니다. 다시 로그인해주세요.');
+}
+function doLogin(){
+  const inp=document.getElementById('loginPw'); const btn=document.getElementById('loginBtn'); const msg=document.getElementById('loginMsg');
+  const pw=inp.value;
+  if(!pw){ msg.textContent='비밀번호를 입력하세요'; return; }
+  btn.disabled=true; msg.textContent='확인 중...';
+  fetchFromGAS({action:'adminLogin',pw:pw},function(res,err){
+    btn.disabled=false; inp.value='';
+    if(!err && res && res.status==='ok' && res.token){ setToken(res.token); hideLogin(); startApp(); return; }
+    if(res && res.status==='locked') msg.textContent='실패 횟수 초과 — 10분 후 다시 시도하세요';
+    else if(res && res.status==='error') msg.textContent='서버 설정 오류: '+(res.message||'');
+    else if(err) msg.textContent='서버 연결 실패 — 잠시 후 다시 시도하세요';
+    else msg.textContent='비밀번호가 올바르지 않습니다';
+  });
+}
+function logout(){
+  if(!IS_DEMO && getToken()) fetchFromGAS({action:'adminLogout'},function(){});
+  setToken('');
+  location.reload();
+}
+function startApp(){
+  if(!appStarted){ appStarted=true; startAutoRefresh(); }
+  loadAll(); loadApprovals();
+}
+function initAuth(){
+  if(IS_DEMO){ hideLogin(); startApp(); return; }
+  if(!getToken()){ showLogin(); return; }
+  fetchFromGAS({action:'checkToken'},function(res,err){
+    if(!err && res && res.status==='ok'){ hideLogin(); startApp(); }
+    else if(err){ showLogin('서버 연결 실패 — 다시 로그인해주세요'); }
+  });
+}
 // ── HTML 이스케이프 (XSS 방어) ──
 function esc(s){
   if(s===null||s===undefined) return '';
@@ -641,7 +713,7 @@ const LS = {
 //  전역 상태 — 데이터는 여기서 단일 관리
 // ══════════════════════════════════════════════════════
 let allData   = [];   // GAS에서 받은 신청 데이터
-let approvedSet = new Set(JSON.parse(localStorage.getItem('yuhan_approved')||'[]'));
+let approvedSet = new Set();   // 승인 목록은 서버(승인현황 시트)가 기준 — 여러 기기에서 공유
 let MENU_DATA = {};   // GAS 식단 시트 (또는 localStorage fallback)
 let charts    = {};
 let selectedLiveDate = '';
@@ -690,7 +762,7 @@ function fetchFromGAS(params, callback) {
   const cbName = 'cb_'+Date.now()+'_'+Math.random().toString(36).slice(2);
   const script = document.createElement('script');
   const timeout = setTimeout(()=>{
-    delete window[cbName];
+    window[cbName] = function(){};            // 늦게 도착한 응답은 무시
     if(document.body.contains(script)) document.body.removeChild(script);
     callback(null, 'timeout');
   }, 25000);  // GAS 콜드스타트 대비 25초
@@ -698,9 +770,13 @@ function fetchFromGAS(params, callback) {
     clearTimeout(timeout);
     delete window[cbName];
     if(document.body.contains(script)) document.body.removeChild(script);
+    if(data && data.status==='unauthorized' && params.action!=='adminLogin'){ handleUnauthorized(); return; }
     callback(data, null);
   };
-  const qParts=Object.entries({...params,callback:cbName}).map(([k,v])=>encodeURIComponent(k)+'='+encodeURIComponent(v)).join('&');
+  const full = Object.assign({}, params, {callback:cbName});
+  const tk = getToken();
+  if(tk && params.action!=='adminLogin') full.token = tk;
+  const qParts = Object.entries(full).map(([k,v])=>encodeURIComponent(k)+'='+encodeURIComponent(v)).join('&');
   script.src = GAS_URL+'?'+qParts;
   document.body.appendChild(script);
 }
@@ -792,7 +868,7 @@ function switchTab(id){
 // ── 날짜 유틸 ──
 function fDate(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
 function getDow(s){return new Date(s+'T00:00:00').getDay();}
-function destroyChart(id){if(charts[id]){charts[id].destroy();delete charts[id];}}
+function destroyChart(id){ try{ var c=Chart.getChart(id); if(c) c.destroy(); }catch(e){} if(charts[id]) delete charts[id]; }
 
 // ══════════════════════════════════════════════════════
 //  전체 렌더 — MENU_DATA와 allData가 모두 준비된 후 호출
@@ -859,6 +935,7 @@ function selectLiveDate(date,btn){
   selectedLiveDate=date;
   renderLive();
   renderLiveList();
+  loadLive();
 }
 
 // ── 현장 승인 ──
@@ -879,11 +956,111 @@ function getApprovedData(){
     return true;
   });
 }
-function saveApproved(){ try{localStorage.setItem('yuhan_approved',JSON.stringify([...approvedSet]));}catch(e){} }
+function approvalSig(){ return Array.from(approvedSet).sort().join('|'); }
+let approvalPending = 0;   // 저장 중인 승인 요청 수 (진행 중에는 서버 값으로 덮어쓰지 않음)
+let approvalGen = 0;       // 승인 변경 시마다 증가 — 변경 전에 보낸 조회 응답은 승인 목록에 반영하지 않음
+if(IS_DEMO){ try{ approvedSet = new Set(JSON.parse(localStorage.getItem('yuhan_approved')||'[]')); }catch(e){} }
+function saveApprovedDemo(){ try{ localStorage.setItem('yuhan_approved',JSON.stringify([...approvedSet])); }catch(e){} }
+function setApprovalLocal(date,sid,on){
+  const k=approvalKey(date,sid);
+  if(on) approvedSet.add(k); else approvedSet.delete(k);
+}
+function activeTabId(){ const el=document.querySelector('.tab-content.active'); return el?el.id.replace('tab-',''):'live'; }
+function refreshApprovalViews(){
+  renderLive(); renderLiveList(); renderAllDatesTable(); renderKPI();
+  if(!allData.length) return;
+  const id=activeTabId();
+  if(id==='overview') renderOverviewCharts();
+  else if(id==='dow') renderDowTab();
+  else if(id==='dept') renderDeptTab();
+  else if(id==='grade') renderGradeTab();
+  else if(id==='time') renderTimeTab();
+  else if(id==='checklist') renderChecklist();
+  else if(id==='student') renderStudentTab();
+}
+// 실시간 화면용: 선택한 날짜의 신청자 + 승인 + 현황을 한 번에 받아 반영 (5초마다)
+// → 방금 신청한 학생도 5초 안에 목록에 나타남 (전체 데이터는 60초마다 별도 갱신)
+function rowSig(rows){ return rows.map(function(r){ return r.studentId+'@'+r.applyTime; }).join('|'); }
+function loadLive(){
+  if(IS_DEMO || !getToken() || !selectedLiveDate) return;
+  const date=selectedLiveDate, gen=approvalGen;
+  fetchFromGAS({action:'getLive',date:date},function(res,err){
+    if(err || !res || res.status!=='ok' || !Array.isArray(res.rows)){ setGasStatus(false); return; }
+    setGasStatus(true);
+    let changed=false;
+    const dayOld=allData.filter(function(r){ return r.date===date; });
+    if(rowSig(dayOld)!==rowSig(res.rows)){
+      allData=allData.filter(function(r){ return r.date!==date; }).concat(res.rows);
+      changed=true;
+    }
+    if(Array.isArray(res.keys) && approvalPending===0 && gen===approvalGen){
+      const before=approvalSig();
+      Array.from(approvedSet).forEach(function(k){ if(k.indexOf(date+'_')===0) approvedSet.delete(k); });
+      res.keys.forEach(function(k){ approvedSet.add(String(k)); });
+      if(approvalSig()!==before) changed=true;
+    }
+    const st=res.stats;
+    if(st && st.status==='ok'){
+      liveStatsCache[date]={sold:st.sold,remain:st.remain,total:st.total};
+      if(st.soldoutManual!==undefined){
+        var so=LS.get('soldout_settings',{manual:false,msg:''});
+        so.manual=(st.soldoutManual===true||st.soldoutManual==='true');
+        if(st.soldoutMsg) so.msg=st.soldoutMsg;
+        LS.set('soldout_settings',so);
+      }
+    }
+    if(changed) refreshApprovalViews(); else renderLive();
+  });
+}
+// 서버의 승인 목록을 가져와 반영 (다른 기기에서 승인한 내용도 5초 안에 반영)
+function loadApprovals(cb){
+  if(IS_DEMO || !getToken() || approvalPending>0){ if(cb) cb(); return; }
+  const gen=approvalGen;
+  fetchFromGAS({action:'getApprovals'},function(res,err){
+    if(!err && res && res.status==='ok' && Array.isArray(res.keys) && approvalPending===0 && gen===approvalGen){
+      const before=approvalSig();
+      approvedSet=new Set(res.keys.map(String));
+      if(approvalSig()!==before) refreshApprovalViews();
+    }
+    if(cb) cb();
+  });
+}
 function toggleApproval(date,sid){
-  var k=approvalKey(date,sid);
-  if(approvedSet.has(k)) approvedSet.delete(k); else approvedSet.add(k);
-  saveApproved(); renderLive(); renderLiveList();
+  const k=approvalKey(date,sid);
+  const on=!approvedSet.has(k);
+  approvalGen++;
+  setApprovalLocal(date,sid,on);
+  renderLive(); renderLiveList(); renderAllDatesTable();
+  if(IS_DEMO){ saveApprovedDemo(); return; }
+  approvalPending++;
+  fetchFromGAS({action:'setApproval',date:date,sid:sid,on:on?'1':'0'},function(res,err){
+    approvalPending--;
+    if(err||!res||res.status!=='ok'){
+      setApprovalLocal(date,sid,!on);
+      renderLive(); renderLiveList(); renderAllDatesTable();
+      alert('⚠️ 승인 저장에 실패했습니다. 네트워크를 확인하고 다시 시도해주세요.');
+    }
+    loadApprovals();
+  });
+}
+// 일괄 요청은 URL 길이 제한 때문에 40명씩 나눠 순차 전송
+function sendApprovalChunks(date,sids,on){
+  const CH=40, chunks=[];
+  for(let i=0;i<sids.length;i+=CH) chunks.push(sids.slice(i,i+CH));
+  approvalPending++;
+  let idx=0, failed=false;
+  (function next(){
+    if(idx>=chunks.length){
+      approvalPending--;
+      if(failed) alert('⚠️ 일부 승인 저장에 실패했습니다. 화면을 서버 기준으로 다시 불러옵니다.');
+      loadApprovals();
+      return;
+    }
+    fetchFromGAS({action:'setApprovalBulk',date:date,sids:chunks[idx].join(','),on:on},function(res,err){
+      if(err||!res||res.status!=='ok') failed=true;
+      idx++; next();
+    });
+  })();
 }
 // ── 일괄 승인 / 전체 취소 ──
 function approveAll(){
@@ -891,12 +1068,12 @@ function approveAll(){
   var dayData = allData.filter(function(r){ return r.date === date; });
   if(!dayData.length){ alert('해당 날짜에 신청 데이터가 없습니다.'); return; }
   if(!confirm(date + ' 신청자 ' + dayData.length + '명을 전체 승인하시겠습니까?')) return;
-  dayData.forEach(function(r){
-    approvedSet.add(approvalKey(date, r.studentId));
-  });
-  saveApproved();
-  renderLive();
-  renderLiveList();
+  var sids = dayData.map(function(r){ return String(r.studentId); });
+  approvalGen++;
+  sids.forEach(function(s){ setApprovalLocal(date,s,true); });
+  renderLive(); renderLiveList(); renderAllDatesTable();
+  if(IS_DEMO){ saveApprovedDemo(); return; }
+  sendApprovalChunks(date,sids,'1');
 }
 
 function clearAllApproval(){
@@ -904,10 +1081,16 @@ function clearAllApproval(){
   var keys = Array.from(approvedSet).filter(function(k){ return k.indexOf(date+'_') === 0; });
   if(!keys.length){ alert('취소할 승인 데이터가 없습니다.'); return; }
   if(!confirm(date + ' 승인된 ' + keys.length + '명을 전체 취소하시겠습니까?')) return;
+  approvalGen++;
   keys.forEach(function(k){ approvedSet.delete(k); });
-  saveApproved();
-  renderLive();
-  renderLiveList();
+  renderLive(); renderLiveList(); renderAllDatesTable();
+  if(IS_DEMO){ saveApprovedDemo(); return; }
+  approvalPending++;
+  fetchFromGAS({action:'clearApprovalDate',date:date},function(res,err){
+    approvalPending--;
+    if(err||!res||res.status!=='ok') alert('⚠️ 전체 취소 저장에 실패했습니다. 화면을 서버 기준으로 다시 불러옵니다.');
+    loadApprovals();
+  });
 }
 
 function isApprovalMode(date){
@@ -982,20 +1165,37 @@ function renderLive(){
 }
 
 
-// ── 실시간 신청 현황 (선택 날짜 기준 최신 신청자) ──
+// ── 실시간 신청 현황 (신청순 / 최신순 전환) ──
+let liveSort = LS.get('live_sort','latest');   // 'latest' = 최신순(기본), 'order' = 신청순
+function setLiveSort(v){
+  liveSort = (v==='order') ? 'order' : 'latest';
+  LS.set('live_sort', liveSort);
+  renderLiveList();
+}
 function renderLiveList(){
   var date=selectedLiveDate;
   var tbody=document.getElementById('liveListBody');
   var countEl=document.getElementById('liveListCount');
   if(!tbody) return;
-  var dayData=allData.filter(function(r){return r.date===date;}).sort(function(a,b){return a.applyTime>b.applyTime?1:-1;});
-  if(countEl) countEl.textContent='총 '+dayData.length+'명';
-  if(!dayData.length){
+  var bL=document.getElementById('sortLatestBtn'), bO=document.getElementById('sortOrderBtn');
+  if(bL) bL.classList.toggle('on', liveSort==='latest');
+  if(bO) bO.classList.toggle('on', liveSort==='order');
+  // 신청 시간 오름차순으로 번호(신청 순번)를 먼저 매기고, 보기 순서만 바꿈 → 번호는 정렬해도 그대로
+  var asc=allData.filter(function(r){return r.date===date;}).map(function(r,i){return {r:r,i:i};});
+  asc.sort(function(a,b){
+    var x=String(a.r.applyTime||''), y=String(b.r.applyTime||'');
+    if(x<y) return -1; if(x>y) return 1; return a.i-b.i;
+  });
+  asc.forEach(function(o,n){ o.no=n+1; });
+  var view = (liveSort==='latest') ? asc.slice().reverse() : asc;
+  if(countEl) countEl.textContent='총 '+asc.length+'명';
+  if(!view.length){
     tbody.innerHTML='<tr><td colspan="7" style="text-align:center;color:var(--gray500);padding:14px">신청 데이터 없음</td></tr>';
     return;
   }
   var apMode=isApprovalMode(date);
-  tbody.innerHTML=dayData.map(function(r,i){
+  tbody.innerHTML=view.map(function(o){
+    var r=o.r;
     var key=approvalKey(date,r.studentId);
     var isAp=approvedSet.has(key);
     var payBadge=r.payMethod==='계좌이체'?'<span class="badge badge-blue">이체</span>':'<span class="badge badge-amber">현금</span>';
@@ -1009,7 +1209,7 @@ function renderLiveList(){
         +' title="'+(isAp?'승인됨(클릭=취소)':'미확인(클릭=승인)')+'"></td>';
     }
     return '<tr class="'+rowCls+'">'
-      +'<td>'+(i+1)+'</td>'
+      +'<td>'+o.no+'</td>'
       +'<td>'+esc(r.dept)+'</td>'
       +'<td>'+esc(r.studentId)+'</td>'
       +'<td><b>'+esc(r.name)+'</b></td>'
@@ -1197,6 +1397,7 @@ function renderDeptTab(){
 }
 
 function renderGradeTab(){
+  const allData=getApprovedData();   // 다른 탭과 동일하게 승인 기준
   const gm={'1학년':0,'2학년':0,'3학년':0};allData.forEach(r=>{if(gm[r.grade]!==undefined)gm[r.grade]++;});
   const total=allData.length;
   destroyChart('chartGrade');
@@ -1433,7 +1634,7 @@ function downloadSignExcel(){
   const qty=info.qty;
   const dt=new Date(date+'T00:00:00');
   const dateLabel=date.replace(/-/g,'.')+'.('+DAY_NAMES[dt.getDay()]+')\n(8:30 ~ 10:30)';
-  const applicants=allData.filter(r=>r.date===date).sort((a,b)=>a.applyTime>b.applyTime?1:-1);
+  const applicants=getApprovedData().filter(r=>r.date===date).sort((a,b)=>a.applyTime>b.applyTime?1:-1);
   const wb=XLSX.utils.book_new();
   const wsData=[['2026년 천원의 아침밥 명단'],['연번','일자','학과','학번','성명','이체','현금','식단메뉴','생수']];
   for(let i=0;i<qty;i++){
@@ -1521,7 +1722,7 @@ function calcManualRow(){
 function downloadChecklistExcel(){
   const target=parseInt(document.getElementById('checkTarget').value)||6000;
   const monthMap={1:0,2:0,3:0,4:0,5:0,6:0,7:0,8:0,9:0,10:0,11:0,12:0};
-  allData.forEach(r=>{if(!r.date)return;const m=parseInt(r.date.split('-')[1]);monthMap[m]=(monthMap[m]||0)+1;});
+  getApprovedData().forEach(r=>{if(!r.date)return;const m=parseInt(r.date.split('-')[1]);monthMap[m]=(monthMap[m]||0)+1;});
   const m123=monthMap[1]+monthMap[2]+monthMap[3];
   const firstHalf=m123+monthMap[4]+monthMap[5]+monthMap[6];
   const totalAll=Object.values(monthMap).reduce((a,b)=>a+b,0);
@@ -1753,7 +1954,7 @@ function saveMenuDataFull(){
 
 function renderMenuEditor(){
   document.getElementById('menuEditorBody').innerHTML=Object.entries(MENU_DATA).sort().map(([date,info])=>
-    '<tr><td><input type="date" value="'+date+'" style="width:130px"></td><td><input type="text" value="'+info.menus.join(', ')+'" style="width:100%"></td><td><input type="number" value="'+info.qty+'" style="width:55px;text-align:center"></td><td><button class="del-row-btn" onclick="this.closest(\'tr\').remove()">삭제</button></td></tr>'
+    '<tr><td><input type="date" value="'+esc(date)+'" style="width:130px"></td><td><input type="text" value="'+esc(info.menus.join(', '))+'" style="width:100%"></td><td><input type="number" value="'+info.qty+'" style="width:55px;text-align:center"></td><td><button class="del-row-btn" onclick="this.closest(\'tr\').remove()">삭제</button></td></tr>'
   ).join('');
 }
 
@@ -1784,11 +1985,20 @@ function uploadMenuFile(input){
 function showMsg(id,dur=3000){const el=document.getElementById(id);if(!el)return;el.style.display='block';setTimeout(()=>el.style.display='none',dur);}
 
 // ── CSV 내보내기 ──
+function csvCell(v){
+  var s=String(v===null||v===undefined?'':v);
+  if(/^[=+\-@\t\r]/.test(s)) s="'"+s;          // 엑셀 수식 주입 방지
+  return '"'+s.replace(/"/g,'""')+'"';
+}
 function exportCSV(){
-  const headers=['신청일','이용일','학과','학년','학번','성명','신청시간','메뉴','결제방법'];
-  const rows=allData.map(r=>[r.timestamp?new Date(r.timestamp).toLocaleDateString('ko-KR'):'',r.date||'',r.dept||'',r.grade||'',r.studentId||'',r.name||'',r.applyTime||'','"'+(r.menu||'')+'"',r.payMethod||'']);
-  const csv=[headers,...rows].map(r=>r.join(',')).join('\n');
-  const blob=new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'});
+  const headers=['신청일','이용일','학과','학년','학번','성명','신청시간','메뉴','결제방법','승인여부'];
+  const rows=allData.map(r=>[
+    r.timestamp?new Date(r.timestamp).toLocaleDateString('ko-KR'):'',
+    r.date||'',r.dept||'',r.grade||'',r.studentId||'',r.name||'',r.applyTime||'',r.menu||'',r.payMethod||'',
+    approvedSet.has(approvalKey(r.date,r.studentId))?'승인':'미승인'
+  ]);
+  const csv=[headers,...rows].map(r=>r.map(csvCell).join(',')).join('\r\n');
+  const blob=new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8'});
   const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='천원의아침밥_'+fDate(new Date())+'.csv';a.click();
 }
 
@@ -1888,39 +2098,19 @@ function generateSampleData(){
   return rows;
 }
 
-// ── 자동 갱신 (60초) ──
+// ── 자동 갱신: 5초(선택 날짜 실시간) + 60초(전체 데이터) ──
 function startAutoRefresh(){
-  // ── 실시간 빠른 갱신: 15초마다 getStats (판매수/잔여만) ──
+  // ── 실시간 빠른 갱신: 5초마다 getStats(판매수/잔여) + 승인 목록 동기화 ──
   if(liveStatsTimer) clearInterval(liveStatsTimer);
   liveStatsTimer = setInterval(function(){
-    if(!IS_DEMO && selectedLiveDate){
-      var today = fDate(new Date());
-      fetchFromGAS({action:'getStats', date:selectedLiveDate}, function(data, err){
-        if(!err && data && data.status==='ok'){
-          liveStatsCache[selectedLiveDate] = {
-            sold:   data.sold,
-            remain: data.remain,
-            total:  data.total
-          };
-          // 수동종료 상태도 갱신
-          if(data.soldoutManual !== undefined){
-            var so = LS.get('soldout_settings',{manual:false,msg:''});
-            so.manual = (data.soldoutManual === true || data.soldoutManual === 'true');
-            if(data.soldoutMsg) so.msg = data.soldoutMsg;
-            LS.set('soldout_settings', so);
-          }
-          setGasStatus(true);
-        } else {
-          setGasStatus(false);
-        }
-        renderLive();
-      });
-    }
+    if(document.hidden || !authed()) return;   // 화면이 가려져 있거나 로그아웃 상태면 호출 안 함
+    loadLive();
   }, 5000);
 
   // ── 전체 데이터 갱신: 60초마다 getAll ──
   if(liveRefreshTimer) clearInterval(liveRefreshTimer);
   liveRefreshTimer = setInterval(function(){
+    if(document.hidden || !authed()) return;
     if(!IS_DEMO){
       fetchFromGAS({action:'getAll'}, function(data, err){
         if(!err && Array.isArray(data)){
@@ -1928,6 +2118,7 @@ function startAutoRefresh(){
           // 캐시 초기화 (getAll로 최신 데이터 확보)
           liveStatsCache = {};
           setGasStatus(true);
+          loadApprovals();   // 다른 날짜의 승인 변경도 반영
         } else {
           setGasStatus(false);
         }
@@ -1937,7 +2128,7 @@ function startAutoRefresh(){
   }, 60000);
 }
 
-document.addEventListener('DOMContentLoaded',function(){loadAll();startAutoRefresh();});
+document.addEventListener('DOMContentLoaded',function(){ initAuth(); });
 </script>
 </body>
 </html>
